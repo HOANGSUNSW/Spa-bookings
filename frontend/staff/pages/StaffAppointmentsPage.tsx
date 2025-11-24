@@ -22,15 +22,52 @@ export const StaffAppointmentsPage: React.FC<AppointmentsPageProps> = ({ current
     const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [viewingClient, setViewingClient] = useState<User | null>(null);
+    const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [filterService, setFilterService] = useState('all');
     const [filterClient, setFilterClient] = useState('all');
 
+    // Fetch appointments from API to ensure we have the latest data (including appointments where staff is therapist)
     useEffect(() => {
-        setAppointments(allAppointments);
-    }, [allAppointments]);
+        const fetchAppointments = async () => {
+            try {
+                setIsLoadingAppointments(true);
+                // Fetch user-specific appointments (includes appointments where user is client OR therapist)
+                const userAppointments = await apiService.getUserAppointments(currentUser.id);
+                setAppointments(userAppointments);
+                console.log(`✅ StaffAppointmentsPage: Fetched ${userAppointments.length} appointments for staff ${currentUser.id}`);
+            } catch (error) {
+                console.error("Failed to fetch appointments:", error);
+                // Fallback to allAppointments from props if API call fails
+                setAppointments(allAppointments);
+            } finally {
+                setIsLoadingAppointments(false);
+            }
+        };
+        
+        // Fetch immediately on mount
+        fetchAppointments();
+        
+        // Set up polling every 30 seconds to auto-update appointments
+        const interval = setInterval(() => {
+            fetchAppointments();
+        }, 30000); // 30 seconds
+        
+        // Also listen for refresh event
+        const handleRefresh = () => {
+            fetchAppointments();
+        };
+        window.addEventListener('refresh-appointments', handleRefresh);
+        window.addEventListener('appointments-updated', handleRefresh);
+        
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('refresh-appointments', handleRefresh);
+            window.removeEventListener('appointments-updated', handleRefresh);
+        };
+    }, [currentUser.id, allAppointments]);
 
     const today = new Date().toISOString().split('T')[0];
 
@@ -228,7 +265,7 @@ export const StaffAppointmentsPage: React.FC<AppointmentsPageProps> = ({ current
                                                 <ClipboardDocumentCheckIcon className="w-5 h-5" /> Hoàn thành
                                             </button>
                                         )}
-                                        {(app.status === 'pending' || app.status === 'upcoming') && (
+                                        {(app.status === 'pending' || app.status === 'upcoming') && activeTab !== 'upcoming' && (
                                             <button onClick={() => setAppointmentToCancel(app)} className="bg-red-100 text-red-700 hover:bg-red-200 font-semibold px-4 py-2 rounded-md text-sm transition-colors">Hủy lịch</button>
                                         )}
                                     </div>
@@ -268,7 +305,7 @@ export const StaffAppointmentsPage: React.FC<AppointmentsPageProps> = ({ current
                                     Hoàn thành
                                 </button>
                             )}
-                            {(selectedAppointment.status === 'pending' || selectedAppointment.status === 'upcoming') && (
+                            {(selectedAppointment.status === 'pending' || selectedAppointment.status === 'upcoming') && activeTab !== 'upcoming' && (
                                 <button onClick={() => setAppointmentToCancel(selectedAppointment)} className="bg-red-500 text-white hover:bg-red-600 font-semibold px-4 py-2 rounded-md text-sm transition-colors mr-3">
                                     Hủy lịch
                                 </button>

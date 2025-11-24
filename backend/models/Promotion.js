@@ -25,10 +25,6 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATEONLY,
       allowNull: false,
     },
-    imageUrl: {
-      type: DataTypes.STRING(500),
-      allowNull: true,
-    },
     discountType: {
       type: DataTypes.ENUM('percentage', 'fixed'),
       allowNull: false,
@@ -44,8 +40,7 @@ module.exports = (sequelize, DataTypes) => {
     targetAudience: {
       type: DataTypes.ENUM(
         'All', 'New Clients', 'Birthday', 'Group', 'VIP',
-        'Tier Level 1', 'Tier Level 2', 'Tier Level 3', 'Tier Level 4',
-        'Tier Level 5', 'Tier Level 6', 'Tier Level 7', 'Tier Level 8'
+        'Tier Level 1', 'Tier Level 2', 'Tier Level 3'
       ),
       allowNull: true,
       defaultValue: 'All',
@@ -68,6 +63,18 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       allowNull: true,
       defaultValue: true,
+    },
+    isPublic: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: true,
+      comment: 'true = public (hiển thị trên trang khách hàng), false = private (chỉ dùng khi biết mã)',
+    },
+    pointsRequired: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Số điểm cần thiết để đổi voucher (chỉ áp dụng cho voucher private)',
     },
   }, {
     tableName: 'promotions',

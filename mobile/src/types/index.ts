@@ -34,16 +34,20 @@ export interface Service {
 }
 
 export interface Promotion {
-  id: number;
-  code: string;
+  id: string;
+  title: string;
   description: string;
+  code: string;
+  expiryDate: string;
+  imageUrl?: string;
   discountType: 'percentage' | 'fixed';
   discountValue: number;
-  startDate: string;
-  endDate: string;
-  isActive: boolean;
-  minPurchase?: number;
-  maxDiscount?: number;
+  termsAndConditions?: string;
+  targetAudience?: string;
+  applicableServiceIds?: string[];
+  minOrderValue?: number;
+  stock?: number | null;
+  isActive?: boolean;
 }
 
 export interface Review {
@@ -78,6 +82,56 @@ export interface Appointment {
   User?: User;
   Service?: Service;
   Staff?: User;
+  TreatmentSession?: {
+    id: string;
+    sessionNumber: number;
+    status: string;
+    treatmentCourseId?: string;
+    TreatmentCourse?: {
+      id: string;
+      totalSessions: number;
+      completedSessions: number;
+      serviceName: string;
+    };
+  };
+}
+
+export interface TreatmentSession {
+  id: string;
+  treatmentCourseId: string;
+  appointmentId?: string;
+  sessionNumber: number;
+  status: 'scheduled' | 'completed' | 'cancelled' | 'missed';
+  sessionDate: string;
+  sessionTime: string;
+  staffId?: string;
+  customerStatusNotes?: string;
+  adminNotes?: string;
+  completedAt?: string;
+  Staff?: User;
+  Appointment?: Appointment;
+}
+
+export interface TreatmentCourse {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  clientId: string;
+  totalSessions: number;
+  completedSessions: number;
+  startDate: string;
+  durationWeeks: number;
+  expiryDate: string;
+  frequencyType?: 'weeks_per_session' | 'sessions_per_week' | null;
+  frequencyValue?: number | null;
+  therapistId?: string | null;
+  status: 'active' | 'completed' | 'expired' | 'cancelled' | 'pending';
+  paymentStatus: 'Paid' | 'Unpaid';
+  notes?: string;
+  Service?: Service;
+  Client?: User;
+  Therapist?: User;
+  sessions?: TreatmentSession[];
 }
 
 export interface AuthResponse {

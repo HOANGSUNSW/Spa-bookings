@@ -10,7 +10,8 @@ import type {
   Review,
   AuthResponse,
   LoginCredentials,
-  RegisterData
+  RegisterData,
+  TreatmentCourse
 } from '../types';
 
 // Auto-detect API URL based on platform
@@ -18,8 +19,12 @@ const getApiBaseUrl = () => {
   if (Platform.OS === 'web') {
     return 'http://localhost:3001/api';
   }
-  // For Android emulator/device, use your computer's IP
-  return 'http://192.168.1.14:3001/api';
+  // For Android emulator/device, use your computer's IP.
+  // Metro shows exp://192.168.1.17:8081 in your environment, use that host so the mobile app
+  // can reach the backend when running on a device on the same Wi-Fi.
+  // Use your machine's LAN IP so physical devices on the same Wi-Fi can reach the backend
+  // Updated to use 192.168.1.17 per request
+  return 'http://192.168.1.13:8081/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -92,6 +97,15 @@ export const getCurrentUser = async (): Promise<User | null> => {
   }
 };
 
+export const changePassword = async (data: {
+  userId: string;
+  currentPassword: string;
+  newPassword: string;
+}): Promise<{ message: string }> => {
+  const response = await apiClient.post('/auth/change-password', data);
+  return response.data;
+};
+
 // --- APPOINTMENTS ---
 export const getUserAppointments = async (userId: string): Promise<Appointment[]> => {
   const response = await apiClient.get(`/appointments/user/${userId}`);
@@ -145,6 +159,11 @@ export const getPromotions = async (): Promise<Promotion[]> => {
   return response.data;
 };
 
+export const applyPromotion = async (code: string): Promise<{ success: boolean; message: string; promotion: Promotion }> => {
+  const response = await apiClient.post(`/promotions/apply/${code}`);
+  return response.data;
+};
+
 // --- REVIEWS ---
 export const getReviews = async (): Promise<Review[]> => {
   const response = await apiClient.get('/reviews');
@@ -172,32 +191,12 @@ export const updateUser = async (id: string, data: Partial<User>) => {
   return response.data;
 };
 
-// --- STAFF SHIFTS ---
-export const getStaffShifts = async (staffId: string) => {
-  const response = await apiClient.get(`/staff/shifts/${staffId}`);
-  return response.data;
-};
-
-export const createStaffShift = async (data: any) => {
-  const response = await apiClient.post('/staff/shifts', data);
-  return response.data;
-};
-
 // --- PAYMENTS ---
-export const processPayment = async (appointmentId: string, paymentMethod: string, amount: number) => {
-  const response = await apiClient.post('/payments/process-payment', {
+export const processPayment = async (appointmentId: string, method: string, amount: number) => {
+  const response = await apiClient.post('/payments/process', {
     appointmentId,
-    paymentMethod,
+    method,
     amount
-  });
-  return response.data;
-};
-
-export const createVNPayUrl = async (appointmentId: string, amount: number, returnUrl: string) => {
-  const response = await apiClient.post('/payments/create-vnpay-url', {
-    appointmentId,
-    amount,
-    returnUrl
   });
   return response.data;
 };
@@ -215,5 +214,39 @@ export const updateService = async (id: string, data: Partial<Service>) => {
 
 export const deleteService = async (id: string) => {
   const response = await apiClient.delete(`/services/${id}`);
+  return response.data;
+};
+
+// --- TREATMENT COURSES ---
+export const getTreatmentCourses = async (params?: { clientId?: string; status?: string }) => {
+  const response = await apiClient.get('/treatment-courses', { params });
+  return response.data as TreatmentCourse[];
+};
+
+export const getTreatmentCourseById = async (id: string) => {
+  const response = await apiClient.get(`/treatment-courses/${id}`);
+  return response.data as TreatmentCourse;
+};
+
+export const confirmTreatmentCoursePayment = async (id: string) => {
+  const response = await apiClient.put(`/treatment-courses/${id}/confirm-payment`);
+  return response.data;
+};
+
+export const completeTreatmentSession = async (
+  courseId: string,
+  payload: { sessionNumber: number; customerStatusNotes?: string; adminNotes?: string }
+) => {
+  const response = await apiClient.put(`/treatment-courses/${courseId}/complete-session`, payload);
+  return response.data;
+};
+
+export const updateTreatmentSession = async (sessionId: string, data: any) => {
+  const response = await apiClient.put(`/treatment-sessions/${sessionId}`, data);
+  return response.data;
+};
+
+export const updateTreatmentCourse = async (courseId: string, data: any) => {
+  const response = await apiClient.put(`/treatment-courses/${courseId}`, data);
   return response.data;
 };

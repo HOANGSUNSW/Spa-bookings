@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getAppointments } from '../../services/apiService';
+import { getUserAppointments, getCurrentUser } from '../../services/apiService';
 import { formatDate, formatCurrency, getStatusLabel, getStatusColor } from '../../utils/formatters';
 import type { Appointment } from '../../types';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +26,12 @@ export const AppointmentsScreen: React.FC<Props> = ({ navigation }) => {
   const loadAppointments = async () => {
     try {
       setLoading(true);
-      const data = await getAppointments();
+      const user = await getCurrentUser();
+      if (!user) {
+        Alert.alert('Lỗi', 'Vui lòng đăng nhập lại');
+        return;
+      }
+      const data = await getUserAppointments(user.id);
       setAppointments(data);
     } catch (error) {
       console.error('Error loading appointments:', error);
@@ -59,48 +64,52 @@ export const AppointmentsScreen: React.FC<Props> = ({ navigation }) => {
     );
   }
 
-  const renderAppointmentCard = ({ item }: { item: Appointment }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => navigation.navigate('AppointmentDetail', { id: item.id })}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={styles.serviceName}>{item.serviceName}</Text>
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: getStatusColor(item.status) }
-          ]}
-        >
-          <Text style={styles.statusText}>{getStatusLabel(item.status)}</Text>
-        </View>
-      </View>
-
-      <View style={styles.cardBody}>
-        <View style={styles.infoRow}>
-          <Ionicons name="calendar-outline" size={16} color="#666" />
-          <Text style={styles.infoText}>{formatDate(item.date)}</Text>
-        </View>
-
-        <View style={styles.infoRow}>
-          <Ionicons name="time-outline" size={16} color="#666" />
-          <Text style={styles.infoText}>{item.time}</Text>
-        </View>
-
-        {item.therapist && (
-          <View style={styles.infoRow}>
-            <Ionicons name="person-outline" size={16} color="#666" />
-            <Text style={styles.infoText}>{item.therapist}</Text>
+  const renderAppointmentCard = ({ item }: { item: Appointment }) => {
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => navigation.navigate('AppointmentDetail', { id: item.id })}
+      >
+        <View style={styles.cardHeader}>
+          <Text style={styles.serviceName}>{item.serviceName}</Text>
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: getStatusColor(item.status) }
+            ]}
+          >
+            <Text style={styles.statusText}>{getStatusLabel(item.status)}</Text>
           </View>
-        )}
-
-        <View style={styles.infoRow}>
-          <Ionicons name="pricetag-outline" size={16} color="#666" />
-          <Text style={styles.priceText}>{formatCurrency(item.price || 0)}</Text>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+
+        <View style={styles.cardBody}>
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar-outline" size={16} color="#666" />
+            <Text style={styles.infoText}>{formatDate(item.date)}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Ionicons name="time-outline" size={16} color="#666" />
+            <Text style={styles.infoText}>{item.time}</Text>
+          </View>
+
+          {item.therapist && (
+            <View style={styles.infoRow}>
+              <Ionicons name="person-outline" size={16} color="#666" />
+              <Text style={styles.infoText}>{item.therapist}</Text>
+            </View>
+          )}
+
+          <View style={styles.infoRow}>
+            <Ionicons name="pricetag-outline" size={16} color="#666" />
+            <Text style={styles.priceText}>
+              {formatCurrency(item.price || item.Service?.price || 0)}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>

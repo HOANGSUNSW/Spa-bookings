@@ -119,10 +119,16 @@ router.post('/', async (req, res) => {
         const createdPayment = await db.Payment.create({
             id: `pay-${uuidv4()}`,
             transactionId: `TXN-${uuidv4().substring(0, 8).toUpperCase()}`, // Generate a mock transaction ID
-            status: 'Completed', // Default to completed for new payments via this API
+            status: newPaymentData.status || 'Pending', // Default to Pending, only Completed when payment is confirmed
             date: new Date().toISOString(),
             ...newPaymentData,
         });
+        
+        // NOTE: Không cộng điểm ở đây vì đây là khi tạo payment (đặt lịch), chưa thanh toán
+        // Điểm chỉ được cộng khi:
+        // 1. VNPay payment thành công (IPN/return handler)
+        // 2. Admin xác nhận thanh toán (PUT /api/payments/:id/complete)
+        
         res.status(201).json(createdPayment);
 
         // Notify admins about payment (async, don't wait)
@@ -171,7 +177,36 @@ router.put('/:id/complete', async (req, res) => {
             return res.status(400).json({ message: 'Payment has already been completed.' });
         }
 
+        const oldStatus = payment.status;
         await payment.update({ status: 'Completed', date: new Date().toISOString() });
+        
+        // Update wallet: add points (1000 VND = 1 point) and update totalSpent
+        // CHỈ cộng điểm khi status chuyển từ Pending/Unpaid sang Completed (tránh cộng điểm 2 lần)
+        if (oldStatus !== 'Completed' && payment.userId) {
+            try {
+                const wallet = await db.Wallet.findOne({ where: { userId: payment.userId } });
+                if (wallet) {
+                    const amount = parseFloat(payment.amount) || 0;
+                    const pointsEarned = Math.floor(amount / 1000);
+                    const currentPoints = wallet.points || 0;
+                    const currentTotalSpent = parseFloat(wallet.totalSpent?.toString() || '0');
+                    
+                    await wallet.update({
+                        points: currentPoints + pointsEarned,
+                        totalSpent: currentTotalSpent + amount,
+                        lastUpdated: new Date()
+                    });
+                    console.log(`✅ [COMPLETE PAYMENT] Wallet updated: +${pointsEarned} points, total: ${currentPoints + pointsEarned} points`);
+                    console.log(`   Payment ID: ${payment.id}, Amount: ${amount} VND, Old Status: ${oldStatus}`);
+                }
+            } catch (walletError) {
+                console.error('Error updating wallet:', walletError);
+                // Don't fail payment if wallet update fails
+            }
+        } else if (oldStatus === 'Completed') {
+            console.log(`⚠️ [COMPLETE PAYMENT] Payment ${payment.id} already completed, skipping wallet update`);
+        }
+        
         res.json(payment);
     } catch (error) {
         console.error('Error completing payment:', error);
@@ -224,7 +259,6 @@ router.post('/process', async (req, res) => {
                 
                 const payment = await db.Payment.create({
                     id: paymentId,
-                    bookingId: appointmentId,
                     appointmentId: appointmentId,
                     userId: appointment.userId,
                     serviceName: appointment.serviceName,
@@ -287,7 +321,6 @@ router.post('/process', async (req, res) => {
             try {
                 const payment = await db.Payment.create({
                     id: `pay-${uuidv4()}`,
-                    bookingId: appointmentId,
                     appointmentId: appointmentId,
                     userId: appointment.userId,
                     serviceName: appointment.serviceName,
@@ -439,12 +472,40 @@ router.get('/vnpay-return', async (req, res) => {
             // Payment successful
             console.log('Payment successful! Updating payment status...');
             
+            const oldStatus = payment.status;
             await payment.update({ 
                 status: 'Completed',
                 transactionId: transactionId || orderId
             });
 
             console.log('Payment updated to Completed');
+
+            // Update wallet: add points (1000 VND = 1 point) and update totalSpent
+            // CHỈ cộng điểm khi status chuyển từ Pending/Unpaid sang Completed (tránh cộng điểm 2 lần)
+            if (oldStatus !== 'Completed' && payment.userId) {
+                try {
+                    const wallet = await db.Wallet.findOne({ where: { userId: payment.userId } });
+                    if (wallet) {
+                        const amount = parseFloat(payment.amount) || 0;
+                        const pointsEarned = Math.floor(amount / 1000);
+                        const currentPoints = wallet.points || 0;
+                        const currentTotalSpent = parseFloat(wallet.totalSpent?.toString() || '0');
+                        
+                        await wallet.update({
+                            points: currentPoints + pointsEarned,
+                            totalSpent: currentTotalSpent + amount,
+                            lastUpdated: new Date()
+                        });
+                        console.log(`✅ [VNPay RETURN] Wallet updated: +${pointsEarned} points, total: ${currentPoints + pointsEarned} points`);
+                        console.log(`   Payment ID: ${payment.id}, Amount: ${amount} VND, Old Status: ${oldStatus}`);
+                    }
+                } catch (walletError) {
+                    console.error('Error updating wallet:', walletError);
+                    // Don't fail payment if wallet update fails
+                }
+            } else if (oldStatus === 'Completed') {
+                console.log(`⚠️ [VNPay RETURN] Payment ${payment.id} already completed, skipping wallet update`);
+            }
 
             // Update appointment payment status and set status to 'pending' (awaiting admin confirmation)
             // Also update all appointments in the same booking group
@@ -470,6 +531,42 @@ router.get('/vnpay-return', async (req, res) => {
                             }
                         );
                         console.log(`Updated all appointments in booking group ${appointment.bookingGroupId} to Paid and pending status`);
+                    }
+                    
+                    // Record promotion usage if appointment has promotionId
+                    // NOTE: For redeemed vouchers, the PromotionUsage is already created and linked when appointment is created
+                    // This logic is only for public vouchers that haven't been tracked yet
+                    if (appointment.promotionId && payment.userId) {
+                        const existingUsage = await db.PromotionUsage.findOne({
+                            where: {
+                                userId: payment.userId,
+                                promotionId: appointment.promotionId,
+                                appointmentId: appointment.id
+                            }
+                        });
+                        
+                        if (!existingUsage) {
+                            // Check if this is a public voucher (not a redeemed voucher)
+                            // Redeemed vouchers already have PromotionUsage created when appointment is created
+                            const promotion = await db.Promotion.findByPk(appointment.promotionId);
+                            const isPublic = promotion && (promotion.isPublic === true || promotion.isPublic === 1 || promotion.isPublic === '1');
+                            
+                            if (isPublic) {
+                                // Only create PromotionUsage for public vouchers
+                                await db.PromotionUsage.create({
+                                    id: `promo-usage-${uuidv4()}`,
+                                    userId: payment.userId,
+                                    promotionId: appointment.promotionId,
+                                    appointmentId: appointment.id,
+                                    serviceId: appointment.serviceId,
+                                });
+                                console.log(`Recorded promotion usage for public promotion ${appointment.promotionId}`);
+                            } else {
+                                console.log(`Skipping PromotionUsage creation for redeemed voucher ${appointment.promotionId} - already handled during appointment creation`);
+                            }
+                        } else {
+                            console.log(`PromotionUsage already exists for promotion ${appointment.promotionId} and appointment ${appointment.id}`);
+                        }
                     }
                 }
             }
@@ -575,10 +672,38 @@ router.post('/vnpay-ipn', async (req, res) => {
 
         if (responseCode === '00') {
             // Payment successful
+            const oldStatus = payment.status;
             await payment.update({ 
                 status: 'Completed',
                 transactionId: transactionId || orderId
             });
+
+            // Update wallet: add points (1000 VND = 1 point) and update totalSpent
+            // CHỈ cộng điểm khi status chuyển từ Pending/Unpaid sang Completed (tránh cộng điểm 2 lần)
+            if (oldStatus !== 'Completed' && payment.userId) {
+                try {
+                    const wallet = await db.Wallet.findOne({ where: { userId: payment.userId } });
+                    if (wallet) {
+                        const amount = parseFloat(payment.amount) || 0;
+                        const pointsEarned = Math.floor(amount / 1000);
+                        const currentPoints = wallet.points || 0;
+                        const currentTotalSpent = parseFloat(wallet.totalSpent?.toString() || '0');
+                        
+                        await wallet.update({
+                            points: currentPoints + pointsEarned,
+                            totalSpent: currentTotalSpent + amount,
+                            lastUpdated: new Date()
+                        });
+                        console.log(`✅ [VNPay IPN] Wallet updated: +${pointsEarned} points, total: ${currentPoints + pointsEarned} points`);
+                        console.log(`   Payment ID: ${payment.id}, Amount: ${amount} VND, Old Status: ${oldStatus}`);
+                    }
+                } catch (walletError) {
+                    console.error('IPN: Error updating wallet:', walletError);
+                    // Don't fail payment if wallet update fails
+                }
+            } else if (oldStatus === 'Completed') {
+                console.log(`⚠️ [VNPay IPN] Payment ${payment.id} already completed, skipping wallet update`);
+            }
 
             // Update appointment payment status and set status to 'pending' (awaiting admin confirmation)
             // Also update all appointments in the same booking group

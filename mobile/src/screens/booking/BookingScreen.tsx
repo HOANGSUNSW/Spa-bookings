@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import * as apiService from '../../services/apiService';
-import { Service, User } from '../../types';
+import { Service, User, Promotion } from '../../types';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { formatCurrency } from '../../utils/formatters';
 
@@ -32,14 +32,17 @@ export const BookingScreen: React.FC<Props> = ({ route, navigation }) => {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState('09:00');
-  const [therapists, setTherapists] = useState<User[]>([]);
-  const [selectedTherapist, setSelectedTherapist] = useState<string>('');
+  const [numberOfSessions, setNumberOfSessions] = useState(1);
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null);
+  const [promoCode, setPromoCode] = useState('');
 
   useEffect(() => {
     loadData();
@@ -57,14 +60,14 @@ export const BookingScreen: React.FC<Props> = ({ route, navigation }) => {
 
   const loadData = async () => {
     try {
-      const [servicesData, usersData, user] = await Promise.all([
+      const [servicesData, user, promotionsData] = await Promise.all([
         apiService.getServices(),
-        apiService.getUsers(),
         apiService.getCurrentUser(),
+        apiService.getPromotions(),
       ]);
       setServices(servicesData.filter((s: Service) => s.isActive !== false));
-      setTherapists(usersData.filter((u: User) => u.role === 'Staff'));
       setCurrentUser(user);
+      setPromotions(promotionsData.filter((p: Promotion) => p.isActive));
     } catch (error) {
       console.error('Failed to load data:', error);
       Alert.alert('Lỗi', 'Không thể tải dữ liệu');
@@ -94,6 +97,107 @@ export const BookingScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  const checkTimeSlotAvailability = async (date: Date, time: string, serviceDuration: number): Promise<boolean> => {
+    if (!currentUser) return true;
+    
+    try {
+      // Get user's appointments on selected date
+      const userAppointments = await apiService.getUserAppointments(currentUser.id);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Filter appointments on same date with status not cancelled
+      const sameDayAppointments = userAppointments.filter((apt: any) => {
+        const aptDate = apt.date || apt.appointmentDate;
+        return aptDate === dateStr && apt.status !== 'cancelled';
+      });
+
+      if (sameDayAppointments.length === 0) return true;
+
+      // Convert time to minutes for comparison
+      const [hours, minutes] = time.split(':').map(Number);
+      const selectedStartMinutes = hours * 60 + minutes;
+      const selectedEndMinutes = selectedStartMinutes + serviceDuration;
+
+      // Check for conflicts
+      for (const apt of sameDayAppointments) {
+        const aptTime = apt.time || apt.appointmentDate?.split('T')[1]?.substring(0, 5) || '00:00';
+        const [aptHours, aptMinutes] = aptTime.split(':').map(Number);
+        const aptStartMinutes = aptHours * 60 + aptMinutes;
+        const aptDuration = apt.Service?.duration || 60;
+        const aptEndMinutes = aptStartMinutes + aptDuration;
+
+        // Check if time ranges overlap
+        const hasOverlap = (
+          (selectedStartMinutes >= aptStartMinutes && selectedStartMinutes < aptEndMinutes) ||
+          (selectedEndMinutes > aptStartMinutes && selectedEndMinutes <= aptEndMinutes) ||
+          (selectedStartMinutes <= aptStartMinutes && selectedEndMinutes >= aptEndMinutes)
+        );
+
+        if (hasOverlap) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error checking availability:', error);
+      return true; // Allow booking if check fails
+    }
+  };
+
+  const handleTimeSelect = async (time: string) => {
+    if (!selectedService) {
+      setSelectedTime(time);
+      return;
+    }
+
+    setCheckingAvailability(true);
+    const isAvailable = await checkTimeSlotAvailability(selectedDate, time, selectedService.duration);
+    setCheckingAvailability(false);
+
+    if (!isAvailable) {
+      Alert.alert(
+        'Không thể đặt lịch',
+        `Bạn đã có lịch hẹn vào khung giờ này (${time}). Vui lòng chọn giờ khác.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setSelectedTime(time);
+  };
+
+  const handleApplyPromotion = async () => {
+    if (!promoCode.trim()) {
+      Alert.alert('Thông báo', 'Vui lòng nhập mã khuyến mãi');
+      return;
+    }
+
+    try {
+      const promo = promotions.find(p => p.code.toLowerCase() === promoCode.toLowerCase());
+      if (!promo) {
+        Alert.alert('Lỗi', 'Mã khuyến mãi không hợp lệ');
+        return;
+      }
+
+      // Check expiry date
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const expiryDate = new Date(promo.expiryDate);
+      expiryDate.setHours(0, 0, 0, 0);
+      if (today > expiryDate) {
+        Alert.alert('Lỗi', 'Mã khuyến mãi đã hết hạn');
+        return;
+      }
+
+      setSelectedPromotion(promo);
+      Alert.alert('Thành công', 'Chọn mã thành công! Mã sẽ được áp dụng khi đặt lịch.');
+    } catch (error) {
+      console.error('Error applying promotion:', error);
+      Alert.alert('Lỗi', 'Không thể áp dụng mã khuyến mãi');
+    }
+  };
+
   const handleBooking = () => {
     if (!selectedService || !currentUser) {
       Alert.alert('Lỗi', 'Vui lòng chọn đầy đủ thông tin');
@@ -109,13 +213,44 @@ export const BookingScreen: React.FC<Props> = ({ route, navigation }) => {
       setIsLoading(true);
       setShowPaymentModal(false);
 
-      // Create appointment first
+      // Apply promotion code if selected
+      if (selectedPromotion) {
+        try {
+          const result = await apiService.applyPromotion(selectedPromotion.code);
+          console.log('Promotion applied successfully:', result);
+          // Update promotion in local state
+          if (result.promotion) {
+            setPromotions(prev => prev.map(p => 
+              p.id === result.promotion.id ? result.promotion : p
+            ));
+          }
+        } catch (error: any) {
+          console.error('Failed to apply promotion:', error);
+          Alert.alert('Lỗi', `Không thể áp dụng mã khuyến mãi: ${error.message || 'Lỗi không xác định'}`);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Final check for time slot availability
+      const isAvailable = await checkTimeSlotAvailability(selectedDate, selectedTime, selectedService.duration);
+      if (!isAvailable) {
+        Alert.alert(
+          'Không thể đặt lịch',
+          'Khung giờ này đã có lịch hẹn khác. Vui lòng chọn giờ khác.',
+          [{ text: 'OK' }]
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Create appointment with quantity for treatment course
       const appointmentData = {
         serviceId: selectedService.id,
         userId: currentUser.id,
         date: selectedDate.toISOString().split('T')[0],
         time: selectedTime,
-        therapistId: selectedTherapist || undefined,
+        quantity: numberOfSessions,
         notes,
         status: 'pending' as const,
         paymentStatus: 'Unpaid' as const,
@@ -124,11 +259,10 @@ export const BookingScreen: React.FC<Props> = ({ route, navigation }) => {
       const appointment = await apiService.createAppointment(appointmentData);
 
       if (paymentMethod === 'VNPay') {
-        // Create VNPay payment URL
-        const amount = selectedService.price;
-        const returnUrl = 'myapp://payment-result'; // Deep link for mobile
+        // Process VNPay payment
+        const amount = selectedService.price * numberOfSessions;
         
-        const result = await apiService.createVNPayUrl(appointment.id, amount, returnUrl);
+        const result = await apiService.processPayment(appointment.id, 'VNPay', amount);
         
         if (result.paymentUrl) {
           // Open VNPay payment page in browser
@@ -229,6 +363,9 @@ export const BookingScreen: React.FC<Props> = ({ route, navigation }) => {
 
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Giờ đặt lịch</Text>
+        {checkingAvailability && (
+          <Text style={styles.checkingText}>Đang kiểm tra lịch trống...</Text>
+        )}
         <View style={styles.timeSlots}>
           {timeSlots.map((time) => (
             <TouchableOpacity
@@ -237,7 +374,8 @@ export const BookingScreen: React.FC<Props> = ({ route, navigation }) => {
                 styles.timeSlot,
                 selectedTime === time && styles.timeSlotSelected,
               ]}
-              onPress={() => setSelectedTime(time)}
+              onPress={() => handleTimeSelect(time)}
+              disabled={checkingAvailability}
             >
               <Text
                 style={[
@@ -251,77 +389,179 @@ export const BookingScreen: React.FC<Props> = ({ route, navigation }) => {
           ))}
         </View>
       </View>
-    </ScrollView>
-  );
-
-  // Step 3: Select Therapist & Notes
-  const renderStepThree = () => (
-    <ScrollView style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Thông Tin Bổ Sung</Text>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Chọn chuyên viên (tùy chọn)</Text>
-        <View style={styles.pickerContainer}>
-          <Picker
-            selectedValue={selectedTherapist}
-            onValueChange={setSelectedTherapist}
-            style={styles.picker}
+        <Text style={styles.label}>Số lượng buổi</Text>
+        <Text style={styles.helperText}>Đặt nhiều buổi để tạo liệu trình điều trị</Text>
+        <View style={styles.quantitySelector}>
+          <TouchableOpacity 
+            style={styles.quantityButton}
+            onPress={() => setNumberOfSessions(Math.max(1, numberOfSessions - 1))}
           >
-            <Picker.Item label="Để spa sắp xếp" value="" />
-            {therapists.map((therapist) => (
-              <Picker.Item
-                key={therapist.id}
-                label={therapist.name}
-                value={therapist.id}
-              />
-            ))}
-          </Picker>
+            <Ionicons name="remove" size={20} color="#E91E63" />
+          </TouchableOpacity>
+          <View style={styles.quantityDisplay}>
+            <Text style={styles.quantityText}>{numberOfSessions}</Text>
+            <Text style={styles.quantityLabel}>buổi</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.quantityButton}
+            onPress={() => setNumberOfSessions(Math.min(20, numberOfSessions + 1))}
+          >
+            <Ionicons name="add" size={20} color="#E91E63" />
+          </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Ghi chú (tùy chọn)</Text>
-        <TextInput
-          style={styles.textArea}
-          placeholder="Thêm ghi chú cho cuộc hẹn..."
-          value={notes}
-          onChangeText={setNotes}
-          multiline
-          numberOfLines={4}
-          textAlignVertical="top"
-        />
-      </View>
-
-      <View style={styles.summary}>
-        <Text style={styles.summaryTitle}>Tóm Tắt Đặt Lịch</Text>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Dịch vụ:</Text>
-          <Text style={styles.summaryValue}>{selectedService?.name}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Ngày:</Text>
-          <Text style={styles.summaryValue}>
-            {selectedDate.toLocaleDateString('vi-VN')}
-          </Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Giờ:</Text>
-          <Text style={styles.summaryValue}>{selectedTime}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Thời gian:</Text>
-          <Text style={styles.summaryValue}>{selectedService?.duration} phút</Text>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.summaryRow}>
-          <Text style={styles.totalLabel}>Tổng tiền:</Text>
-          <Text style={styles.totalValue}>
-            {formatCurrency(selectedService?.price || 0)}
-          </Text>
-        </View>
+        {numberOfSessions > 1 && (
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle-outline" size={18} color="#E91E63" />
+            <Text style={styles.infoText}>
+              Sẽ tạo liệu trình {numberOfSessions} buổi. Các buổi tiếp theo sẽ được lên lịch sau.
+            </Text>
+          </View>
+        )}
       </View>
     </ScrollView>
   );
+
+  // Step 3: Notes & Summary
+  const renderStepThree = () => {
+    // Calculate discount
+    const serviceTotal = (selectedService?.price || 0) * numberOfSessions;
+    const discount = selectedPromotion
+      ? selectedPromotion.discountType === 'percentage'
+        ? serviceTotal * (selectedPromotion.discountValue / 100)
+        : selectedPromotion.discountValue
+      : 0;
+    const total = serviceTotal - discount;
+
+    return (
+      <ScrollView style={styles.stepContent}>
+        <Text style={styles.stepTitle}>Thông Tin Bổ Sung</Text>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Ghi chú (tùy chọn)</Text>
+          <TextInput
+            style={styles.textArea}
+            placeholder="Thêm ghi chú cho cuộc hẹn..."
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+          />
+        </View>
+
+        {/* Promotion Section */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Mã khuyến mãi</Text>
+          <View style={styles.promoInputContainer}>
+            <TextInput
+              style={styles.promoInput}
+              placeholder="Nhập mã khuyến mãi"
+              value={promoCode}
+              onChangeText={setPromoCode}
+              autoCapitalize="characters"
+            />
+            <TouchableOpacity
+              style={styles.applyButton}
+              onPress={handleApplyPromotion}
+            >
+              <Text style={styles.applyButtonText}>Áp dụng</Text>
+            </TouchableOpacity>
+          </View>
+          {selectedPromotion && (
+            <View style={styles.selectedPromoBox}>
+              <View style={styles.selectedPromoHeader}>
+                <Text style={styles.selectedPromoTitle}>{selectedPromotion.title}</Text>
+                <TouchableOpacity onPress={() => setSelectedPromotion(null)}>
+                  <Ionicons name="close-circle" size={20} color="#E91E63" />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.selectedPromoDesc}>{selectedPromotion.description}</Text>
+            </View>
+          )}
+          
+          {/* Available Promotions List */}
+          {promotions.length > 0 && (
+            <View style={styles.promoListContainer}>
+              <Text style={styles.promoListTitle}>Ưu đãi có sẵn:</Text>
+              {promotions.map((promo) => {
+                const isSelected = selectedPromotion?.id === promo.id;
+                return (
+                  <TouchableOpacity
+                    key={promo.id}
+                    style={[
+                      styles.promoItem,
+                      isSelected && styles.promoItemSelected
+                    ]}
+                    onPress={() => setSelectedPromotion(isSelected ? null : promo)}
+                  >
+                    <View style={styles.promoItemContent}>
+                      <Text style={styles.promoItemTitle}>{promo.title}</Text>
+                      <Text style={styles.promoItemCode}>Code: {promo.code}</Text>
+                      <Text style={styles.promoItemDesc}>{promo.description}</Text>
+                    </View>
+                    <Ionicons 
+                      name={isSelected ? "checkmark-circle" : "chevron-forward"} 
+                      size={24} 
+                      color={isSelected ? "#4CAF50" : "#999"} 
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.summary}>
+          <Text style={styles.summaryTitle}>Tóm Tắt Đặt Lịch</Text>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Dịch vụ:</Text>
+            <Text style={styles.summaryValue}>{selectedService?.name}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Số buổi:</Text>
+            <Text style={styles.summaryValue}>{numberOfSessions} buổi</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Ngày bắt đầu:</Text>
+            <Text style={styles.summaryValue}>
+              {selectedDate.toLocaleDateString('vi-VN')}
+            </Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Giờ:</Text>
+            <Text style={styles.summaryValue}>{selectedTime}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Thời gian/buổi:</Text>
+            <Text style={styles.summaryValue}>{selectedService?.duration} phút</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Giá/buổi:</Text>
+            <Text style={styles.summaryValue}>
+              {formatCurrency(selectedService?.price || 0)}
+            </Text>
+          </View>
+          {discount > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Giảm giá:</Text>
+              <Text style={[styles.summaryValue, styles.discountText]}>
+                -{formatCurrency(discount)}
+              </Text>
+            </View>
+          )}
+          <View style={styles.summaryRow}>
+            <Text style={styles.totalLabel}>Tổng tiền:</Text>
+            <Text style={styles.totalValue}>
+              {formatCurrency(total)}
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  };
 
   const renderStep = () => {
     switch (currentStep) {
@@ -611,6 +851,63 @@ const styles = StyleSheet.create({
   timeSlotTextSelected: {
     color: '#fff',
   },
+  checkingText: {
+    fontSize: 12,
+    color: '#E91E63',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  quantitySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginTop: 12,
+  },
+  quantityButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#E91E63',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityDisplay: {
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  quantityText: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#E91E63',
+  },
+  quantityLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FFF0F5',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#C2185B',
+    lineHeight: 18,
+  },
   pickerContainer: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -796,5 +1093,103 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  // Promotion styles
+  promoInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  promoInput: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    padding: 12,
+    fontSize: 14,
+    color: '#333',
+  },
+  applyButton: {
+    backgroundColor: '#E91E63',
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  applyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  selectedPromoBox: {
+    backgroundColor: '#F1F8E9',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  selectedPromoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  selectedPromoTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  selectedPromoDesc: {
+    fontSize: 12,
+    color: '#558B2F',
+  },
+  promoListContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+  },
+  promoListTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+  },
+  promoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  promoItemSelected: {
+    borderColor: '#4CAF50',
+    backgroundColor: '#F1F8E9',
+  },
+  promoItemContent: {
+    flex: 1,
+  },
+  promoItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
+  },
+  promoItemCode: {
+    fontSize: 12,
+    color: '#E91E63',
+    marginBottom: 2,
+  },
+  promoItemDesc: {
+    fontSize: 11,
+    color: '#666',
+  },
+  discountText: {
+    color: '#4CAF50',
   },
 });

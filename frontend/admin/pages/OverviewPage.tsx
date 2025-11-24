@@ -23,28 +23,47 @@ const STAFF_ROLES: UserRole[] = ['Staff', 'Admin'];
 interface StatCardProps {
     title: string;
     value: string;
-    icon: React.ReactNode;
+    icon?: React.ReactNode; // Make icon optional
     change?: string;
     changeType?: 'increase' | 'decrease';
-    bgColor: string;
+    bgColor?: string; // Make bgColor optional since we're removing icon
 }
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, change, changeType, bgColor }) => (
-    <div className="bg-white p-6 rounded-lg shadow-md transition-all hover:shadow-lg hover:-translate-y-1">
-        <div className="flex items-center justify-between">
-            <div>
-                <p className="text-sm font-medium text-gray-500 uppercase">{title}</p>
-                <p className="text-3xl font-bold text-gray-800 mt-1">{value}</p>
+
+// Helper function to calculate font size based on value length
+const getFontSize = (value: string): string => {
+    // Remove currency symbols and spaces for length calculation
+    const cleanValue = value.replace(/[₫,\s]/g, '');
+    const length = cleanValue.length;
+    
+    if (length <= 8) return 'text-3xl'; // Default size for numbers like 14.000.000
+    if (length <= 10) return 'text-2xl'; // For numbers like 1.000.000.000
+    if (length <= 12) return 'text-xl';  // For numbers like 1.000.000.000.000
+    if (length <= 14) return 'text-lg';  // For very long numbers
+    return 'text-base'; // Fallback for extremely long numbers
+};
+
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, change, changeType, bgColor }) => {
+    const fontSize = getFontSize(value);
+    
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md transition-all hover:shadow-lg hover:-translate-y-1">
+            <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-500 uppercase">{title}</p>
+                    <p className={`${fontSize} font-bold text-gray-800 mt-1 break-words overflow-hidden`} style={{ wordBreak: 'break-word' }}>
+                        {value}
+                    </p>
+                </div>
             </div>
-            <div className={`p-3 rounded-full ${bgColor} text-white`}>{icon}</div>
+            {change && (
+                <p className={`mt-2 text-xs flex items-center ${changeType === 'increase' ? 'text-green-600' : 'text-red-600'}`}>
+                    {/* FIX: Removed ArrowUpIcon and ArrowDownIcon as they are not exported from shared/icons.tsx. The change indicator relies on text and color. */}
+                    {change} so với tháng trước
+                </p>
+            )}
         </div>
-        {change && (
-            <p className={`mt-2 text-xs flex items-center ${changeType === 'increase' ? 'text-green-600' : 'text-red-600'}`}>
-                {/* FIX: Removed ArrowUpIcon and ArrowDownIcon as they are not exported from shared/icons.tsx. The change indicator relies on text and color. */}
-                {change} so với tháng trước
-            </p>
-        )}
-    </div>
-);
+    );
+};
 
 // --- MAIN COMPONENT ---
 interface OverviewPageProps {
@@ -430,7 +449,8 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ allServices, allAppo
 
     const bookingHeatmapData: { slots: string[]; data: Record<string, number> } = useMemo(() => {
         const safeAppointments = Array.isArray(localAppointments) && localAppointments.length > 0 ? localAppointments : (Array.isArray(allAppointments) ? allAppointments : []);
-        const timeSlots = ['09:00', '11:00', '13:00', '15:00', '17:00', '19:00'];
+        // Updated to 2 shifts: Morning (9-16h) and Afternoon (16-22h)
+        const timeSlots = ['09:00', '11:00', '13:00', '15:00', '16:00', '18:00', '20:00', '21:00'];
         const data: Record<string, number> = {};
 
         safeAppointments.forEach(app => {
@@ -467,7 +487,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ allServices, allAppo
 
     return (
         <div className="space-y-8">
-            <h1 className="text-3xl font-bold text-gray-800 animate-fadeInDown">Dashboard Tổng Quan (AI-Driven)</h1>
+            <h1 className="text-3xl font-bold text-gray-800 animate-fadeInDown">Dashboard Tổng Quan</h1>
 
             {/* Revenue Period Selector */}
             <div className="bg-white p-4 rounded-lg shadow-md flex items-center gap-4">
@@ -502,27 +522,25 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ allServices, allAppo
                 <div className="opacity-0 animate-fadeInUp" style={{ animationDelay: '100ms' }}>
                     <StatCard 
                         title={
-                            revenuePeriod === 'total' ? 'Tổng Doanh thu' :
-                            revenuePeriod === 'day' ? 'Doanh thu Hôm nay' :
-                            revenuePeriod === 'week' ? 'Doanh thu Tuần này' :
-                            'Doanh thu Tháng này'
+                            revenuePeriod === 'total' ? 'TỔNG DOANH THU' :
+                            revenuePeriod === 'day' ? 'DOANH THU HÔM NAY' :
+                            revenuePeriod === 'week' ? 'DOANH THU TUẦN NÀY' :
+                            'DOANH THU THÁNG NÀY'
                         } 
                         value={stats.totalRevenue || '0 ₫'} 
-                        icon={<CurrencyDollarIcon className="w-8 h-8" />} 
-                        bgColor="bg-green-500" 
                     />
                 </div>
                 <div className="opacity-0 animate-fadeInUp" style={{ animationDelay: '200ms' }}>
-                    <StatCard title="Tổng Lịch hẹn" value={String(stats.totalAppointments || 0)} icon={<CalendarIcon className="w-8 h-8" />} bgColor="bg-blue-500" />
+                    <StatCard title="TỔNG LỊCH HẸN" value={String(stats.totalAppointments || 0)} />
                 </div>
                 <div className="opacity-0 animate-fadeInUp" style={{ animationDelay: '300ms' }}>
-                    <StatCard title="Tổng Khách hàng" value={String(stats.totalCustomers || 0)} icon={<UsersIcon className="w-8 h-8" />} bgColor="bg-purple-500" />
+                    <StatCard title="TỔNG KHÁCH HÀNG" value={String(stats.totalCustomers || 0)} />
                 </div>
                 <div className="opacity-0 animate-fadeInUp" style={{ animationDelay: '400ms' }}>
-                    <StatCard title="Tổng Dịch vụ" value={String(stats.totalServices || 0)} icon={<StarIcon className="w-8 h-8" />} bgColor="bg-indigo-500" />
+                    <StatCard title="TỔNG DỊCH VỤ" value={String(stats.totalServices || 0)} />
                 </div>
                 <div className="opacity-0 animate-fadeInUp" style={{ animationDelay: '500ms' }}>
-                    <StatCard title="Tổng Nhân viên" value={String(stats.totalStaff || 0)} icon={<TrophyIcon className="w-8 h-8" />} bgColor="bg-pink-500" />
+                    <StatCard title="TỔNG NHÂN VIÊN" value={String(stats.totalStaff || 0)} />
                 </div>
             </div>
 

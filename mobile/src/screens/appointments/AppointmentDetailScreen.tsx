@@ -117,6 +117,28 @@ export const AppointmentDetailScreen: React.FC<Props> = ({ route, navigation }) 
               <Text style={styles.durationText}>{appointment.Service.duration} phút</Text>
             </View>
           )}
+          {appointment.TreatmentSession?.TreatmentCourse && (
+            <View style={styles.treatmentInfo}>
+              <View style={styles.treatmentBadge}>
+                <Ionicons name="fitness-outline" size={16} color="#8b5cf6" />
+                <Text style={styles.treatmentText}>Liệu trình</Text>
+              </View>
+              <View style={styles.sessionProgress}>
+                <Text style={styles.sessionLabel}>Buổi {appointment.TreatmentSession.sessionNumber}/{appointment.TreatmentSession.TreatmentCourse.totalSessions}</Text>
+                <View style={styles.progressBar}>
+                  <View 
+                    style={[
+                      styles.progressFill,
+                      { width: `${(appointment.TreatmentSession.TreatmentCourse.completedSessions / appointment.TreatmentSession.TreatmentCourse.totalSessions) * 100}%` }
+                    ]} 
+                  />
+                </View>
+                <Text style={styles.progressText}>
+                  Đã hoàn thành {appointment.TreatmentSession.TreatmentCourse.completedSessions}/{appointment.TreatmentSession.TreatmentCourse.totalSessions} buổi
+                </Text>
+              </View>
+            </View>
+          )}
           {appointment.notes && (
             <>
               <Text style={styles.notesTitle}>Ghi chú</Text>
@@ -195,12 +217,44 @@ export const AppointmentDetailScreen: React.FC<Props> = ({ route, navigation }) 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Thanh toán</Text>
         <View style={styles.card}>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Giá dịch vụ</Text>
-            <Text style={styles.priceValue}>
-              {formatCurrency(appointment.totalPrice || appointment.price || 0)}
-            </Text>
-          </View>
+          {appointment.TreatmentSession?.TreatmentCourse ? (
+            <>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Giá/buổi</Text>
+                <Text style={styles.priceValue}>
+                  {formatCurrency(
+                    appointment.totalPrice || 
+                    appointment.price || 
+                    appointment.Service?.price || 
+                    0
+                  )}
+                </Text>
+              </View>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>
+                  Tổng ({appointment.TreatmentSession.TreatmentCourse.totalSessions} buổi)
+                </Text>
+                <Text style={styles.totalPriceValue}>
+                  {formatCurrency(
+                    (appointment.totalPrice || appointment.price || appointment.Service?.price || 0) * 
+                    appointment.TreatmentSession.TreatmentCourse.totalSessions
+                  )}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Giá dịch vụ</Text>
+              <Text style={styles.priceValue}>
+                {formatCurrency(
+                  appointment.totalPrice || 
+                  appointment.price || 
+                  appointment.Service?.price || 
+                  0
+                )}
+              </Text>
+            </View>
+          )}
           {appointment.paymentStatus && (
             <View style={styles.paymentStatus}>
               <Ionicons
@@ -377,6 +431,46 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0f0f0',
     gap: 12
   },
+  treatmentInfo: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#F3E8FF',
+    borderRadius: 12,
+  },
+  treatmentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  treatmentText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8b5cf6',
+  },
+  sessionProgress: {
+    gap: 8,
+  },
+  sessionLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#6d28d9',
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#E9D5FF',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#8b5cf6',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#7c3aed',
+  },
   infoContent: {
     flex: 1
   },
@@ -406,6 +500,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#8b5cf6'
+  },
+  totalPriceValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#6d28d9'
   },
   paymentStatus: {
     flexDirection: 'row',

@@ -49,8 +49,9 @@ db.sequelize.sync(syncOptions) // Removed `force: true` to make data persistent
     const paymentRoutes = require('./routes/payments');
     const reviewRoutes = require('./routes/reviews');
     const chatbotRoutes = require('./routes/chatbot');
-    const roomRoutes = require('./routes/rooms');
     const notificationRoutes = require('./routes/notifications');
+    const treatmentCourseRoutes = require('./routes/treatmentCourses');
+    const treatmentSessionRoutes = require('./routes/treatmentSessions');
     
     // Use unprotected auth routes first
     app.use('/api/auth', authRoutes);
@@ -64,8 +65,9 @@ db.sequelize.sync(syncOptions) // Removed `force: true` to make data persistent
     app.use('/api/staff', staffRoutes);
     app.use('/api/payments', paymentRoutes);
     app.use('/api/reviews', reviewRoutes);
+    app.use('/api/treatment-courses', treatmentCourseRoutes);
+    app.use('/api/treatment-sessions', treatmentSessionRoutes);
     app.use('/api/notifications', notificationRoutes);
-    app.use('/api/rooms', roomRoutes);
     app.use('/api/chatbot', chatbotRoutes);
 
 
@@ -75,9 +77,30 @@ db.sequelize.sync(syncOptions) // Removed `force: true` to make data persistent
     });
 
     // Start the server
-    app.listen(PORT, () => {
+    // Listen on 0.0.0.0 to allow connections from emulator and devices on the same network
+    app.listen(PORT, '0.0.0.0', async () => {
       console.log(`Server is running on port ${PORT}`);
       console.log(`Access the API at http://localhost:${PORT}`);
+      console.log(`Server listening on 0.0.0.0:${PORT} (accessible from network)`);
+      console.log(`Mobile app (Android emulator) should use: http://10.0.2.2:${PORT}/api`);
+      console.log(`Mobile app (iOS Simulator) should use: http://localhost:${PORT}/api`);
+      console.log(`Mobile app (Physical device) should use: http://192.168.80.1:${PORT}/api`);
+      
+      // Verify email connection
+      try {
+        const emailService = require('./services/emailService');
+        const emailConnected = await emailService.verifyConnection();
+        if (emailConnected) {
+          console.log('✅ Email service is ready');
+        } else {
+          console.warn('⚠️  Email service is not configured. Please check EMAIL_SETUP.md for configuration instructions.');
+        }
+      } catch (error) {
+        console.warn('⚠️  Email service verification failed:', error.message);
+        console.warn('⚠️  Email verification feature will not work until SMTP is configured.');
+      }
+      
+      // Cron jobs removed - TreatmentCourse functionality removed
     });
   })
   .catch((err) => {

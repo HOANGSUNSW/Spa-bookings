@@ -75,7 +75,35 @@ router.get('/shifts/:staffId', async (req, res) => {
 router.get('/shifts', async (req, res) => {
     try {
         const staffShifts = await db.StaffShift.findAll();
-        res.json(staffShifts);
+        
+        // Fix shifts that are missing shiftHours by adding default hours based on shiftType
+        const defaultShiftHours = {
+            morning: { start: '09:00', end: '16:00' },
+            afternoon: { start: '16:00', end: '22:00' },
+        };
+        
+        const fixedShifts = await Promise.all(staffShifts.map(async (shift) => {
+            // If shift is missing shiftHours and has a standard shiftType, add default hours
+            if (!shift.shiftHours && shift.shiftType && shift.shiftType !== 'leave' && shift.shiftType !== 'custom' && defaultShiftHours[shift.shiftType]) {
+                try {
+                    await shift.update({
+                        shiftHours: defaultShiftHours[shift.shiftType]
+                    });
+                    console.log(`✅ Fixed shift ${shift.id}: Added default shiftHours for ${shift.shiftType}`);
+                    // Return updated shift data
+                    return {
+                        ...shift.toJSON(),
+                        shiftHours: defaultShiftHours[shift.shiftType]
+                    };
+                } catch (updateError) {
+                    console.error(`Error fixing shift ${shift.id}:`, updateError);
+                    return shift.toJSON();
+                }
+            }
+            return shift.toJSON();
+        }));
+        
+        res.json(fixedShifts);
     } catch (error) {
         console.error('Error fetching all staff shifts:', error);
         res.status(500).json({ message: 'Internal server error' });
@@ -83,16 +111,20 @@ router.get('/shifts', async (req, res) => {
 });
 
 // POST /api/staff/shifts - Add a new shift/leave request
+// Note: Staff requests always start as 'pending', only admin can approve via PUT
 router.post('/shifts', async (req, res) => {
     const newShiftData = req.body;
     if (!newShiftData.staffId || !newShiftData.date || !newShiftData.shiftType) {
         return res.status(400).json({ message: 'Missing required shift data' });
     }
     try {
+        // Always set status to 'pending' for staff requests
+        // Admin can approve later via PUT /api/staff/shifts/:id
+        const { status, ...shiftDataWithoutStatus } = newShiftData;
         const createdShift = await db.StaffShift.create({
             id: `shift-${uuidv4()}`,
-            status: 'pending',
-            ...newShiftData,
+            status: 'pending', // Always pending when created by staff
+            ...shiftDataWithoutStatus,
         });
         res.status(201).json(createdShift);
     } catch (error) {
@@ -160,142 +192,7 @@ router.post('/sales', async (req, res) => {
 });
 
 // Note: InternalNotification and InternalNews tables have been removed
-
-// =====================================================
-// STAFF TASKS ROUTES
-// =====================================================
-
-// GET /api/staff/tasks - Get all staff tasks
-router.get('/tasks', async (req, res) => {
-    try {
-        const tasks = await db.StaffTask.findAll({
-            include: [
-                { model: db.User, as: 'AssignedTo', attributes: ['id', 'name', 'email'] },
-                { model: db.User, as: 'AssignedBy', attributes: ['id', 'name', 'email'] }
-            ]
-        });
-        res.json(tasks);
-    } catch (error) {
-        console.error('Error fetching staff tasks:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
-
-// GET /api/staff/tasks/:id - Get a specific task
-router.get('/tasks/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const task = await db.StaffTask.findByPk(id, {
-            include: [
-                { model: db.User, as: 'AssignedTo', attributes: ['id', 'name', 'email'] },
-                { model: db.User, as: 'AssignedBy', attributes: ['id', 'name', 'email'] }
-            ]
-        });
-        if (!task) {
-            return res.status(404).json({ message: 'Task not found' });
-        }
-        res.json(task);
-    } catch (error) {
-        console.error('Error fetching staff task:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
-
-// GET /api/staff/tasks/assigned-to/:staffId - Get tasks assigned to a specific staff
-router.get('/tasks/assigned-to/:staffId', async (req, res) => {
-    const { staffId } = req.params;
-    try {
-        const tasks = await db.StaffTask.findAll({
-            where: { assignedToId: staffId },
-            include: [
-                { model: db.User, as: 'AssignedTo', attributes: ['id', 'name', 'email'] },
-                { model: db.User, as: 'AssignedBy', attributes: ['id', 'name', 'email'] }
-            ],
-            order: [['dueDate', 'ASC']]
-        });
-        res.json(tasks);
-    } catch (error) {
-        console.error('Error fetching staff tasks:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
-
-// POST /api/staff/tasks - Create a new task
-router.post('/tasks', async (req, res) => {
-    const { title, description, assignedToId, assignedById, dueDate, status } = req.body;
-    if (!title || !assignedToId || !assignedById || !dueDate) {
-        return res.status(400).json({ message: 'Missing required task data' });
-    }
-    try {
-        const newTask = await db.StaffTask.create({
-            id: `task-${uuidv4()}`,
-            title,
-            description,
-            assignedToId,
-            assignedById,
-            dueDate,
-            status: status || 'pending',
-            createdAt: new Date(),
-        });
-        const taskWithRelations = await db.StaffTask.findByPk(newTask.id, {
-            include: [
-                { model: db.User, as: 'AssignedTo', attributes: ['id', 'name', 'email'] },
-                { model: db.User, as: 'AssignedBy', attributes: ['id', 'name', 'email'] }
-            ]
-        });
-        res.status(201).json(taskWithRelations);
-    } catch (error) {
-        console.error('Error creating staff task:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
-
-// PUT /api/staff/tasks/:id - Update a task
-router.put('/tasks/:id', async (req, res) => {
-    const { id } = req.params;
-    const updateData = req.body;
-    try {
-        const task = await db.StaffTask.findByPk(id);
-        if (!task) {
-            return res.status(404).json({ message: 'Task not found' });
-        }
-        
-        // If status is being updated to 'completed', set completedAt
-        if (updateData.status === 'completed' && task.status !== 'completed') {
-            updateData.completedAt = new Date();
-        } else if (updateData.status !== 'completed' && task.status === 'completed') {
-            updateData.completedAt = null;
-        }
-        
-        await task.update(updateData);
-        const updatedTask = await db.StaffTask.findByPk(id, {
-            include: [
-                { model: db.User, as: 'AssignedTo', attributes: ['id', 'name', 'email'] },
-                { model: db.User, as: 'AssignedBy', attributes: ['id', 'name', 'email'] }
-            ]
-        });
-        res.json(updatedTask);
-    } catch (error) {
-        console.error('Error updating staff task:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
-
-// DELETE /api/staff/tasks/:id - Delete a task
-router.delete('/tasks/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const result = await db.StaffTask.destroy({ where: { id } });
-        if (result > 0) {
-            res.status(204).send();
-        } else {
-            res.status(404).json({ message: 'Task not found' });
-        }
-    } catch (error) {
-        console.error('Error deleting staff task:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
+// Note: StaffTask table and routes have been removed
 
 // GET /api/staff/notifications/:userId - Get internal notifications
 // userId can be 'all' to get all notifications or a specific user ID

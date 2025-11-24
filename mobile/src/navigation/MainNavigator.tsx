@@ -10,6 +10,10 @@ import { AppointmentsScreen } from '../screens/appointments/AppointmentsScreen';
 import { AppointmentDetailScreen } from '../screens/appointments/AppointmentDetailScreen';
 import { PromotionsScreen } from '../screens/promotions/PromotionsScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
+import { ChangePasswordScreen } from '../screens/profile/ChangePasswordScreen';
+import { TreatmentCoursesScreen } from '../screens/treatments/TreatmentCoursesScreen';
+import { TreatmentCourseDetailScreen } from '../screens/treatments/TreatmentCourseDetailScreen';
+import { ChatbotScreen } from '../screens/client/ChatbotScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -108,6 +112,34 @@ const AppointmentsStack = () => {
   );
 };
 
+// Treatment Courses Stack
+const TreatmentsStack = () => {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: '#E91E63'
+        },
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: '600'
+        }
+      }}
+    >
+      <Stack.Screen
+        name="TreatmentCourses"
+        component={TreatmentCoursesScreen}
+        options={{ title: 'Liệu trình' }}
+      />
+      <Stack.Screen
+        name="TreatmentCourseDetail"
+        component={TreatmentCourseDetailScreen}
+        options={{ title: 'Chi tiết liệu trình' }}
+      />
+    </Stack.Navigator>
+  );
+};
+
 // Promotions Stack
 const PromotionsStack = () => {
   return (
@@ -149,6 +181,28 @@ const ProfileStack = () => {
         name="ProfileMain"
         component={ProfileScreen}
         options={{ title: 'Hồ sơ' }}
+      />
+      <Stack.Screen
+        name="ChangePassword"
+        component={ChangePasswordScreen}
+        options={{ headerShown: false }}
+      />
+    </Stack.Navigator>
+  );
+};
+
+// Chatbot Stack
+const ChatbotStack = () => {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false
+      }}
+    >
+      <Stack.Screen
+        name="ChatbotMain"
+        component={ChatbotScreen}
+        options={{ title: 'Trợ lý ảo' }}
       />
     </Stack.Navigator>
   );
@@ -206,12 +260,32 @@ export const MainNavigator = () => {
         }}
       />
       <Tab.Screen
+        name="TreatmentsTab"
+        component={TreatmentsStack}
+        options={{
+          title: 'Liệu trình',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="leaf" color={color} size={size} />
+          )
+        }}
+      />
+      <Tab.Screen
         name="PromotionsTab"
         component={PromotionsStack}
         options={{
           title: 'Khuyến mãi',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="pricetag" color={color} size={size} />
+          )
+        }}
+      />
+      <Tab.Screen
+        name="ChatbotTab"
+        component={ChatbotStack}
+        options={{
+          title: 'Trợ lý',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles" color={color} size={size} />
           )
         }}
       />

@@ -47,7 +47,7 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'Client',
     },
     status: {
-      type: DataTypes.ENUM('Active', 'Inactive', 'Locked'),
+      type: DataTypes.ENUM('Active', 'Inactive', 'Locked', 'Pending'),
       allowNull: false,
       defaultValue: 'Active',
     },
@@ -55,18 +55,24 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: true,
     },
-    loginHistory: {
-      type: DataTypes.JSON,
+    emailVerificationToken: {
+      type: DataTypes.STRING(255),
       allowNull: true,
+      unique: true,
     },
-    roomId: {
-      type: DataTypes.STRING,
+    isEmailVerified: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    passwordResetToken: {
+      type: DataTypes.STRING(255),
       allowNull: true,
-      references: {
-        model: 'rooms',
-        key: 'id',
-      },
-      onDelete: 'SET NULL',
+      unique: true,
+    },
+    passwordResetTokenExpires: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
   }, {
     tableName: 'users',

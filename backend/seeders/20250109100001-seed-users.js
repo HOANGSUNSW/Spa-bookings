@@ -1,5 +1,5 @@
 'use strict';
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
@@ -119,6 +119,20 @@ module.exports = {
         joinDate: '2024-05-12',
         birthday: '2000-05-05',
         gender: 'Nữ',
+        role: 'Client',
+        status: 'Active',
+        lastLogin: new Date(),
+      },
+      {
+        id: 'user-client-4',
+        name: 'Trần Văn Đức',
+        email: 'client4@spa.vn',
+        password: hashedPassword,
+        phone: '0904445555',
+        profilePictureUrl: 'https://picsum.photos/seed/C004/200',
+        joinDate: '2024-06-01',
+        birthday: '1995-03-15',
+        gender: 'Nam',
         role: 'Client',
         status: 'Active',
         lastLogin: new Date(),

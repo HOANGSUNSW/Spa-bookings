@@ -11,27 +11,22 @@ export interface ServiceCategory {
   id: number;
   name: string;
   description?: string;
-  iconUrl?: string;
-  order?: number;
+  displayOrder?: number;
 }
 
 export interface Service {
+  isHot: any;
   id: string;
   name: string;
   description: string;
-  longDescription?: string;
   price: number;
   discountPercent?: number; // Phần trăm giảm giá (0-100)
   discountPrice?: number; // Giá sau khi giảm (được tính tự động từ backend)
   duration: number; // in minutes
-  category?: string; // The category name, populated from the join
   categoryId?: number; // The actual foreign key (nullable)
   imageUrl?: string;
   rating: number;
   reviewCount: number;
-  isHot?: boolean;
-  isNew?: boolean;
-  promoExpiryDate?: string;
   isActive?: boolean;
 }
 
@@ -40,21 +35,26 @@ export interface Appointment {
   serviceId: string;
   serviceName: string;
   userId: string;
-  userName?: string; // Tên khách hàng (để hiển thị trên lịch)
   date: string;
   time: string;
-  status: 'upcoming' | 'completed' | 'cancelled' | 'pending' | 'in-progress';
+  status: 'upcoming' | 'completed' | 'cancelled' | 'pending' | 'in-progress' | 'scheduled';
   paymentStatus?: 'Paid' | 'Unpaid';
-  therapist?: string; // Name of the therapist
   therapistId?: string; // ID of the therapist
   notesForTherapist?: string;
   staffNotesAfterSession?: string;
-  isStarted?: boolean;
-  isCompleted?: boolean;
-  reviewRating?: number;
   rejectionReason?: string;
   bookingGroupId?: string;
-  roomId?: string;
+  Client?: { // Client association from backend
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+  };
+  Therapist?: { // Therapist association from backend
+    id: string;
+    name: string;
+    email: string;
+  };
 }
 
 export type UserRole = 'Admin' | 'Staff' | 'Client';
@@ -116,12 +116,10 @@ export interface User {
   role: UserRole;
   status: UserStatus;
   lastLogin?: string;
-  loginHistory?: LoginAttempt[];
-  roomId?: string; // Room assigned to staff member
   // Note: CustomerProfile and StaffProfile removed - all info in users table
 }
 
-export type PromotionTargetAudience = 'All' | 'New Clients' | 'Birthday' | 'Group' | 'VIP' | 'Tier Level 1' | 'Tier Level 2' | 'Tier Level 3' | 'Tier Level 4' | 'Tier Level 5' | 'Tier Level 6' | 'Tier Level 7' | 'Tier Level 8';
+export type PromotionTargetAudience = 'All' | 'New Clients' | 'Birthday' | 'Group' | 'VIP' | 'Tier Level 1' | 'Tier Level 2' | 'Tier Level 3';
 
 export interface Promotion {
   id: string;
@@ -138,6 +136,8 @@ export interface Promotion {
   minOrderValue?: number;
   stock?: number | null; // Số lượng còn lại (NULL = không giới hạn)
   isActive?: boolean;
+  isPublic?: boolean; // true = public (hiển thị trên trang khách hàng), false = private (chỉ dùng khi biết mã)
+  pointsRequired?: number | null; // Số điểm cần thiết để đổi voucher (chỉ áp dụng cho voucher private)
 }
 
 export interface Review {
@@ -222,7 +222,8 @@ export interface TreatmentCourse {
   sessions?: TreatmentSession[];
   
   // Trạng thái
-  status: 'draft' | 'active' | 'paused' | 'completed' | 'expired' | 'cancelled';
+  status: 'draft' | 'active' | 'paused' | 'completed' | 'expired' | 'cancelled' | 'pending';
+  paymentStatus?: 'Paid' | 'Unpaid';
   
   // Thời gian
   startDate?: string;
@@ -325,7 +326,7 @@ export interface RedeemableVoucher {
   pointsRequired: number;
   value: number;
   applicableServiceIds?: string[];
-  targetAudience?: 'All' | 'VIP' | 'Tier Level 1' | 'Tier Level 2' | 'Tier Level 3' | 'Tier Level 4' | 'Tier Level 5' | 'Tier Level 6' | 'Tier Level 7' | 'Tier Level 8';
+  targetAudience?: 'All' | 'VIP' | 'Tier Level 1' | 'Tier Level 2' | 'Tier Level 3';
 }
 
 export interface Tier {
@@ -366,7 +367,6 @@ export interface Payment {
   transactionId?: string;
   userId: string;
   appointmentId?: string;
-  bookingId?: string; // ID đặt lịch
   serviceName?: string;
   amount: number;
   method: PaymentMethod;
@@ -469,7 +469,6 @@ export interface StaffShift {
   isUpForSwap?: boolean;
   swapClaimedBy?: string;
   managerApprovalStatus?: 'pending_approval' | 'approved' | 'rejected';
-  roomId?: string; // Room assigned for this shift
 }
 
 
@@ -484,12 +483,4 @@ export interface StaffTask {
   status: 'pending' | 'in-progress' | 'completed' | 'overdue';
   createdAt: string; // ISO DateTime string
   completedAt?: string; // ISO DateTime string
-}
-
-export interface Room {
-  id: string;
-  name: string;
-  capacity: number;
-  equipmentIds?: string[] | null;
-  isActive: boolean;
 }

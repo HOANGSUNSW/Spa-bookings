@@ -127,7 +127,10 @@ export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Tùy chọn</Text>
 
-        <TouchableOpacity style={styles.optionButton}>
+        <TouchableOpacity 
+          style={styles.optionButton}
+          onPress={() => navigation.navigate('ChangePassword')}
+        >
           <Ionicons name="lock-closed-outline" size={20} color="#8b5cf6" />
           <Text style={styles.optionText}>Đổi mật khẩu</Text>
           <Ionicons name="chevron-forward" size={20} color="#ccc" />

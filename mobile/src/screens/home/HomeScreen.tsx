@@ -103,10 +103,11 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
+    <View style={{ flex: 1 }}>
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
       {/* Hero Slider */}
       <View style={styles.heroContainer}>
         <ScrollView
@@ -156,32 +157,43 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.seeAll}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {services.map((service) => (
-            <TouchableOpacity
-              key={service.id}
-              style={styles.serviceCard}
-              onPress={() => navigation.navigate('ServiceDetail', { id: service.id })}
-            >
-              <Image
-                source={{ uri: service.imageUrl || 'https://via.placeholder.com/200' }}
-                style={styles.serviceImage}
-              />
-              <View style={styles.serviceInfo}>
-                <Text style={styles.serviceName} numberOfLines={2}>
-                  {service.name}
-                </Text>
-                <Text style={styles.servicePrice}>{formatCurrency(service.price)}</Text>
-                <View style={styles.serviceRating}>
-                  <Ionicons name="star" size={14} color="#FFD700" />
-                  <Text style={styles.ratingText}>
-                    {service.averageRating?.toFixed(1) || '5.0'}
+        {services.length > 0 ? (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.servicesScrollContent}
+          >
+            {services.map((service) => (
+              <TouchableOpacity
+                key={service.id}
+                style={styles.serviceCard}
+                onPress={() => navigation.navigate('ServiceDetail', { id: service.id })}
+              >
+                <Image
+                  source={{ uri: service.imageUrl || 'https://via.placeholder.com/200' }}
+                  style={styles.serviceImage}
+                />
+                <View style={styles.serviceInfo}>
+                  <Text style={styles.serviceName} numberOfLines={2}>
+                    {service.name}
                   </Text>
+                  <Text style={styles.servicePrice}>{formatCurrency(service.price)}</Text>
+                  <View style={styles.serviceRating}>
+                    <Ionicons name="star" size={14} color="#FFD700" />
+                    <Text style={styles.ratingText}>
+                      {service.averageRating?.toFixed(1) || '5.0'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={styles.emptyServices}>
+            <Ionicons name="spa-outline" size={48} color="#ccc" />
+            <Text style={styles.emptyText}>Chưa có dịch vụ nào</Text>
+          </View>
+        )}
       </View>
 
       {/* Promotions */}
@@ -250,6 +262,16 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       )}
     </ScrollView>
+      
+      {/* Floating Chatbot Button */}
+      <TouchableOpacity
+        style={styles.floatingChatButton}
+        onPress={() => navigation.navigate('ChatbotTab')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="chatbubbles" size={28} color="#fff" />
+      </TouchableOpacity>
+    </View>
   );
 };
 
@@ -378,6 +400,19 @@ const styles = StyleSheet.create({
     color: '#666',
     marginLeft: 4,
   },
+  servicesScrollContent: {
+    paddingRight: 16,
+  },
+  emptyServices: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+  },
   promoCard: {
     backgroundColor: '#fff',
     padding: 16,
@@ -466,5 +501,21 @@ const styles = StyleSheet.create({
   reviewDate: {
     fontSize: 12,
     color: '#999',
+  },
+  floatingChatButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#E91E63',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });
