@@ -57,60 +57,29 @@ const PromotionCard: React.FC<PromotionCardProps> = ({ promotion }) => {
   };
 
   return (
-    <div className={`group relative bg-white rounded-[2rem] shadow-card hover:shadow-[0_20px_40px_-15px_rgba(6,182,212,0.3)] transition-all duration-500 hover:-translate-y-2 border border-gray-100 overflow-hidden h-full flex flex-col ${isExpired ? 'grayscale opacity-70' : ''}`}>
-      
-      {/* Decorative Glow Behind */}
-      <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-brand-accent to-orange-400 rounded-full blur-[60px] opacity-0 group-hover:opacity-20 transition-opacity duration-500"></div>
-
-      {/* Image Section */}
-      <div className="relative h-52 overflow-hidden rounded-t-[2rem]">
-        <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors z-10"></div>
-        <img 
-            className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-[1.5s] ease-out" 
-            src={promotion.imageUrl} 
-            alt={promotion.title} 
-            loading="lazy"
-        />
+    <div className={`bg-white rounded-lg shadow-lg overflow-hidden flex flex-col group transition-all duration-300 ease-out ${isExpired ? 'opacity-60 grayscale' : ''}`}>
+      <div className="p-5 flex flex-col flex-grow">
+        <div className="mb-3">
+            <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md inline-block">
+                ƯU ĐÃI -{discountDisplay}
+            </span>
+        </div>
+        <h3 className="text-lg font-bold font-serif text-brand-dark mb-2 h-14 line-clamp-2">
+            {promotion.title}
+        </h3>
+        <p className="text-brand-text text-sm mb-4 h-10 overflow-hidden line-clamp-2">{promotion.description}</p>
         
-        {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-
-        {/* Discount Badge - Floating 3D effect */}
-        <div className="absolute top-4 right-4 z-20 transform group-hover:scale-110 transition-transform duration-300">
-             <div className="bg-coral-gradient text-white px-4 py-2 rounded-2xl shadow-lg shadow-rose-500/30 flex flex-col items-center justify-center min-w-[80px] border-2 border-white/20 backdrop-blur-md">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-90">Giảm</span>
-                <span className="text-xl font-extrabold leading-none">{discountDisplay}</span>
-            </div>
-        </div>
-
-        {/* Audience Tag */}
-        <div className="absolute top-4 left-4 z-20">
-             <span className="bg-white/20 backdrop-blur-md border border-white/30 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
-                 {promotion.targetAudience === 'All' ? 'Tất cả khách hàng' : promotion.targetAudience}
-             </span>
-        </div>
-
-        {/* Title over Image */}
-        <div className="absolute bottom-0 left-0 w-full p-5 z-20">
-            <h3 className="text-xl font-serif font-bold text-white leading-tight drop-shadow-md line-clamp-2 group-hover:text-cyan-50 transition-colors">
-                {promotion.title}
-            </h3>
-        </div>
-      </div>
-
-      {/* Content Section */}
-      <div className="p-5 flex flex-col flex-grow relative bg-white">
-        <div className="flex-grow">
-             <p className="text-sm text-gray-500 font-medium line-clamp-2 mb-4 leading-relaxed">{promotion.description}</p>
-             
-             {/* Timer */}
-             <div className="flex items-center gap-2 text-xs font-bold text-gray-500 bg-gray-50 p-2 rounded-lg w-fit mb-4 border border-gray-100">
-                <ClockIcon className={`w-4 h-4 ${isExpired ? 'text-red-500' : 'text-brand-primary'}`} />
-                {isExpired ? (
-                    <span className="text-red-500">Đã hết hạn</span>
-                ) : (
-                    <span>Hết hạn sau: <span className="text-brand-dark">{timeLeft.days} ngày {timeLeft.hours}h</span></span>
-                )}
+        <div className="mt-auto">
+            <div className="flex items-center justify-between mb-4 text-sm">
+                <span className="text-brand-text">
+                    <strong>Giảm giá: </strong>
+                    <span className="text-red-600 font-bold">{discountDisplay}</span>
+                </span>
+                 <span className="text-brand-text flex items-center gap-1">
+                    <ClockIcon className="w-4 h-4 text-gray-500"/>
+                    <strong>Hạn: </strong>
+                    {isExpired ? 'Hết hạn' : `${timeLeft.days}d ${timeLeft.hours}h ${timeLeft.minutes}m`}
+                </span>
             </div>
         </div>
 

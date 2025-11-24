@@ -44,6 +44,7 @@ export interface Appointment {
   staffNotesAfterSession?: string;
   rejectionReason?: string;
   bookingGroupId?: string;
+  promotionId?: string; // ID of applied promotion (nullable)
   Client?: { // Client association from backend
     id: string;
     name: string;
@@ -127,7 +128,6 @@ export interface Promotion {
   description: string;
   code: string;
   expiryDate: string;
-  imageUrl?: string;
   discountType: 'percentage' | 'fixed';
   discountValue: number;
   termsAndConditions?: string;

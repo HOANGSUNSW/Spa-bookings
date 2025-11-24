@@ -90,8 +90,7 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, allServices }) =
       { path: '/about', name: 'Giới thiệu' },
       { path: '/services', name: 'Dịch vụ' },
       { path: '/promotions', name: 'Ưu đãi' },
-      { path: '/qa', name: 'Hỏi đáp' },
-      { path: '/contact', name: 'Liên hệ' },
+      { path: '/booking', name: 'Đặt lịch' },
     ];
     
     const NavItem: React.FC<{ to: string, name: string, onClick?: () => void }> = ({ to, name, onClick }) => (
@@ -187,9 +186,7 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, allServices }) =
                                             <Link to="/appointments" className="flex items-center gap-4 px-4 py-3 rounded-xl text-lg font-semibold text-gray-700 hover:bg-brand-secondary hover:text-brand-primary transition-colors" onClick={() => setIsUserMenuOpen(false)}>
                                                 <AppointmentsIcon className="w-6 h-6" /> Lịch hẹn của tôi
                                             </Link>
-                                        </div>
-                                        <div className="p-2 border-t border-gray-100 mt-1">
-                                            <button onClick={handleLogout} className="flex w-full items-center gap-4 px-4 py-3 rounded-xl text-lg font-semibold text-red-600 hover:bg-red-50 transition-colors">
+                                            <button onClick={handleLogout} className="flex items-center gap-4 px-4 py-3 rounded-xl text-lg font-semibold text-red-600 hover:bg-red-50 transition-colors w-full">
                                                 <LogoutIcon className="w-6 h-6" /> Đăng xuất
                                             </button>
                                         </div>

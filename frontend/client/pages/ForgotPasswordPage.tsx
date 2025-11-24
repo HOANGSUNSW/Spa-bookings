@@ -68,22 +68,37 @@
 
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowUturnLeftIcon, LogoIcon, MailIcon } from '../../shared/icons';
+import * as apiService from '../services/apiService';
 
 const ForgotPasswordPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [message, setMessage] = useState('');
+    const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setError('');
+        setMessage('');
         setIsLoading(true);
-        // Simulate API call
-        setTimeout(() => {
-            setMessage(`Nếu email "${email}" tồn tại trong hệ thống, chúng tôi đã gửi một liên kết đặt lại mật khẩu đến đó.`);
+
+        try {
+            console.log('🔄 Sending forgot password request for email:', email);
+            const result = await apiService.forgotPassword(email);
+            console.log('✅ Forgot password response:', result);
+            setMessage(result.message);
+        } catch (err: any) {
+            console.error('❌ Forgot password error:', err);
+            // Check if it's a 404 error (route not found)
+            if (err.message && err.message.includes('Not Found')) {
+                setError('Không tìm thấy API endpoint. Vui lòng kiểm tra lại backend server.');
+            } else {
+                setError(err.message || 'Không thể gửi email đặt lại mật khẩu. Vui lòng thử lại.');
+            }
+        } finally {
             setIsLoading(false);
-        }, 1500);
+        }
     };
 
     return (
@@ -111,14 +126,14 @@ const ForgotPasswordPage: React.FC = () => {
                 </div>
                 
                 {message ? (
-                    <div className="text-center animate-fadeIn">
-                        <div className="mb-6 bg-green-50 border border-green-100 text-green-700 px-5 py-4 rounded-2xl text-sm font-medium shadow-sm">
-                            {message}
+                    <div className="text-center">
+                        <div className="mb-4">
+                            <svg className="mx-auto h-16 w-16 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                         </div>
-                        <Link 
-                            to="/login" 
-                            className="inline-block w-full py-3.5 bg-brand-dark text-white font-bold rounded-xl hover:bg-brand-primary transition-all shadow-lg hover:shadow-brand-primary/30"
-                        >
+                        <p className="text-green-600 bg-green-50 p-3 rounded-md text-sm mb-4">{message}</p>
+                        <Link to="/login" className="font-medium text-brand-primary hover:text-brand-dark">
                             Quay lại trang Đăng nhập
                         </Link>
                     </div>
@@ -142,21 +157,16 @@ const ForgotPasswordPage: React.FC = () => {
                                     />
                                 </div>
                             </div>
+                            {error && (
+                                <p className="text-red-500 text-sm text-center">{error}</p>
+                            )}
                             <div>
                                 <button
                                     type="submit"
                                     disabled={isLoading}
-                                    className="group relative w-full flex justify-center items-center py-4 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-ocean-gradient hover:shadow-lg hover:shadow-brand-primary/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+                                    className="w-full bg-brand-dark text-white font-bold py-3 px-4 rounded-md hover:bg-brand-primary transition-colors duration-300 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {isLoading ? (
-                                        <span className="flex items-center gap-2">
-                                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            Đang gửi...
-                                        </span>
-                                    ) : "Gửi Liên Kết Đặt Lại"}
+                                    {isLoading ? 'Đang gửi...' : 'Gửi Liên Kết Đặt Lại'}
                                 </button>
                             </div>
                         </form>

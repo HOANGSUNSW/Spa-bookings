@@ -41,6 +41,7 @@ import ProfilePage from "./client/pages/ProfilePage";
 import LoginPage from "./client/pages/LoginPage";
 import RegisterPage from "./client/pages/RegisterPage";
 import ForgotPasswordPage from "./client/pages/ForgotPasswordPage";
+import VerifyEmailPage from "./client/pages/VerifyEmailPage";
 import { PromotionsPage } from "./client/pages/PromotionsPage";
 import PolicyPage from "./client/pages/PolicyPage";
 import PaymentSuccessPage from "./client/pages/PaymentSuccessPage";
@@ -533,6 +534,7 @@ const AppContent: React.FC = () => {
             }
           />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
 
           {/* Protected Client Routes */}
           <Route

@@ -11,8 +11,8 @@
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=admin@spa.vn        # Email dùng để GỬI email (email của spa/admin)
-SMTP_PASS=password123            # Mật khẩu ứng dụng (App Password) - KHÔNG phải mật khẩu Gmail thông thường!
+SMTP_USER=your-email@gmail.com        # Email dùng để GỬI email (email của spa/admin)
+SMTP_PASS=your-app-password            # Mật khẩu ứng dụng (App Password) - KHÔNG phải mật khẩu Gmail thông thường!
 
 # ============================================
 # Frontend URL

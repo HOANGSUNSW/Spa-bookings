@@ -914,7 +914,11 @@ export const HomePage: React.FC<HomePageProps> = ({ allServices, allPromotions, 
         };
         
         return servicesToUse
-            .filter(s => toBoolean(s.isActive, true))
+            .filter(s => {
+                // Check isActive (default to true if undefined)
+                const isActive = toBoolean(s.isActive, true);
+                return isActive;
+            })
             .sort((a, b) => {
                 const ratingA = typeof a.rating === 'string' ? parseFloat(a.rating) : (a.rating || 0);
                 const ratingB = typeof b.rating === 'string' ? parseFloat(b.rating) : (b.rating || 0);
@@ -954,6 +958,7 @@ export const HomePage: React.FC<HomePageProps> = ({ allServices, allPromotions, 
   
     const featuredPromotions = useMemo(() => {
         return allPromotions.filter(promo => {
+            // Only show public promotions on homepage
             if (promo.isPublic === false) return false;
             const expiry = promo.expiryDate ? new Date(promo.expiryDate) : null;
             const now = new Date();

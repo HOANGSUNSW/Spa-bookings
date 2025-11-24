@@ -61,6 +61,7 @@ export const PromotionsPage: React.FC<PromotionsPageProps> = ({ currentUser, wal
     const navigate = useNavigate();
     const [promotions, setPromotions] = useState<Promotion[]>([]);
     const [redeemableVouchers, setRedeemableVouchers] = useState<RedeemableVoucher[]>([]);
+    const [redeemedVouchers, setRedeemedVouchers] = useState<Array<Promotion & { redeemedCount: number }>>([]); // Vouchers đã đổi bằng điểm
     const [pointsHistory, setPointsHistory] = useState<Array<{date: string; pointsChange: number; type: string; source: string; description: string}>>([]);
     const [luckyWheelPrizes, setLuckyWheelPrizes] = useState<Prize[]>([]);
     
@@ -98,10 +99,15 @@ export const PromotionsPage: React.FC<PromotionsPageProps> = ({ currentUser, wal
                 setAllAppointments(userAppointments);
 
                 if (currentUser) {
-                    const fetchedPointsHistory = await apiService.getUserPointsHistory(currentUser.id);
+                    const [fetchedPointsHistory, fetchedWallet, fetchedRedeemed] = await Promise.all([
+                        apiService.getUserPointsHistory(currentUser.id),
+                        apiService.getUserWallet(currentUser.id),
+                        apiService.getMyRedeemedVouchers(currentUser.id)
+                    ]);
                     setPointsHistory(fetchedPointsHistory);
-                    const fetchedWallet = await apiService.getUserWallet(currentUser.id);
                     setWallet(fetchedWallet);
+                    setRedeemedVouchers(fetchedRedeemed || []);
+                    console.log('✅ Fetched redeemed vouchers:', fetchedRedeemed?.length || 0);
                 }
             } catch (error) { 
                 console.error("Failed to fetch promotions page data:", error); 
@@ -110,6 +116,30 @@ export const PromotionsPage: React.FC<PromotionsPageProps> = ({ currentUser, wal
             }
         };
         fetchData();
+        
+        // Listen for refresh events (e.g., after booking with voucher or payment success)
+        const handleRefresh = () => {
+            console.log('🔄 [PromotionsPage] Refreshing vouchers after booking/payment...');
+            fetchData();
+        };
+        
+        window.addEventListener('refresh-vouchers', handleRefresh);
+        window.addEventListener('refresh-appointments', handleRefresh);
+        
+        // Also refresh when page becomes visible (user navigates back)
+        const handleVisibilityChange = () => {
+            if (!document.hidden && currentUser) {
+                console.log('🔄 [PromotionsPage] Page visible, refreshing vouchers...');
+                fetchData();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
+        return () => {
+            window.removeEventListener('refresh-vouchers', handleRefresh);
+            window.removeEventListener('refresh-appointments', handleRefresh);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [currentUser, setWallet]);
 
     // AI suggestion logic
@@ -253,7 +283,6 @@ export const PromotionsPage: React.FC<PromotionsPageProps> = ({ currentUser, wal
                                 description: `Voucher từ Vòng quay may mắn.`,
                                 code: `LUCKY${Math.floor(1000 + Math.random() * 9000)}`,
                                 expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                                imageUrl: '/img/promotions/promo-voucher.jpg',
                                 discountType: prize.type === 'voucher' ? 'percentage' : 'fixed',
                                 discountValue: prize.value,
                                 termsAndConditions: 'Voucher áp dụng cho lần đặt lịch tiếp theo.',
@@ -299,41 +328,38 @@ export const PromotionsPage: React.FC<PromotionsPageProps> = ({ currentUser, wal
     const handleRedeemVoucher = async (voucher: RedeemableVoucher) => { /* existing logic */ };
     const handleClaimPromotion = async (promoToClaim: Promotion) => { /* existing logic */ };
     
-    const handleRedeemWithPoints = async (promotion: Promotion | RedeemableVoucher) => {
+    const handleRedeemWithPoints = async (promotion: Promotion) => {
         if (!currentUser || !wallet) return;
-
-        // Normalize fields to support both Promotion and RedeemableVoucher shapes
-        const pAny: any = promotion as any;
-        const promoId = pAny.id;
-        const pointsRequired = Number(pAny.pointsRequired ?? pAny.points ?? 0) || 0;
-        const promoTitle = pAny.title || pAny.name || pAny.code || 'Voucher';
-
-        if (wallet.points < pointsRequired) {
-            alert(`Bạn cần ${pointsRequired} điểm để đổi voucher này. Bạn hiện có ${wallet.points} điểm.`);
+        
+        if (wallet.points < (promotion.pointsRequired || 0)) {
+            alert(`Bạn cần ${promotion.pointsRequired} điểm để đổi voucher này. Bạn hiện có ${wallet.points} điểm.`);
             return;
         }
-
-        if (!window.confirm(`Bạn có chắc muốn đổi ${pointsRequired} điểm để lấy voucher "${promoTitle}"?`)) {
+        
+        if (!window.confirm(`Bạn có chắc muốn đổi ${promotion.pointsRequired} điểm để lấy voucher "${promotion.title}"?`)) {
             return;
         }
-
+        
         try {
-            const result = await apiService.redeemVoucherWithPoints(promoId, currentUser.id);
+            const result = await apiService.redeemVoucherWithPoints(promotion.id, currentUser.id);
             alert(result.message);
-
-            // Refresh wallet, promotions, and redeemable vouchers
-            const [updatedWallet, updatedRedeemable] = await Promise.all([
+            
+            // Refresh wallet, promotions, redeemable vouchers, and redeemed vouchers
+            const [updatedWallet, updatedRedeemable, updatedRedeemed] = await Promise.all([
                 apiService.getUserWallet(currentUser.id),
-                apiService.getRedeemableVouchers()
+                apiService.getRedeemableVouchers(),
+                apiService.getMyRedeemedVouchers(currentUser.id)
             ]);
             setWallet(updatedWallet);
             setRedeemableVouchers(updatedRedeemable);
-
+            setRedeemedVouchers(updatedRedeemed || []);
+            console.log('✅ Refreshed redeemed vouchers after redemption:', updatedRedeemed?.length || 0);
+            
             const updatedPromotions = await apiService.getPromotions({ userId: currentUser.id });
             setPromotions(updatedPromotions);
-
-            // Add to user vouchers (result.promotion should be normalized by backend)
-            setUserVouchers(prev => [...prev, result.promotion]);
+            
+            // Switch to "Ưu đãi của tôi" tab to show the newly redeemed voucher
+            setActiveTab('my_offers');
         } catch (error: any) {
             console.error('Error redeeming voucher:', error);
             alert(error.message || 'Có lỗi xảy ra khi đổi voucher');
@@ -444,28 +470,50 @@ export const PromotionsPage: React.FC<PromotionsPageProps> = ({ currentUser, wal
                     )}
                     
 
-                    {/* My Vouchers */}
+                    {/* My Vouchers - Display redeemed vouchers (vouchers đã đổi bằng điểm) */}
                     <div>
                         <h2 className="text-2xl font-serif font-bold text-gray-800 mb-4">Voucher của tôi</h2>
-                        {userVouchers.length > 0 ? (
+                        {redeemedVouchers.filter((v: any) => v.redeemedCount > 0).length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {userVouchers.map(promo => (
-                                    <div key={promo.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col transition-all hover:shadow-xl border-2 border-brand-primary/50">
+                                {redeemedVouchers.filter((v: any) => v.redeemedCount > 0).map((voucher: any) => (
+                                    <div key={voucher.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col transition-all hover:shadow-xl border-2 border-brand-primary/50">
                                         <div className="p-5 flex flex-col flex-grow">
-                                            <h3 className="font-bold text-lg text-gray-800 mb-2">{promo.title}</h3>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <h3 className="font-bold text-lg text-gray-800">{voucher.title}</h3>
+                                                {voucher.redeemedCount > 0 && (
+                                                    <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded-full">
+                                                        Còn {voucher.redeemedCount} voucher
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="flex justify-between items-center text-sm font-semibold mb-4">
-                                                <span className="text-brand-primary">Mã: {promo.code}</span>
-                                                <span className="text-red-500 flex items-center gap-1"><ClockIcon className="w-4 h-4" /> {new Date(promo.expiryDate).toLocaleDateString('vi-VN')}</span>
+                                                <span className="text-brand-primary">Mã: {voucher.code}</span>
+                                                <span className="text-red-500 flex items-center gap-1">
+                                                    <ClockIcon className="w-4 h-4" /> 
+                                                    {new Date(voucher.expiryDate).toLocaleDateString('vi-VN')}
+                                                </span>
                                             </div>
                                             <div className="flex gap-2">
-                                                <Link to={`/booking?promoCode=${promo.code}`} className="flex-1 text-center bg-brand-primary text-white py-2 px-4 rounded-md font-semibold hover:bg-brand-dark transition-colors">Dùng ngay</Link>
-                                                <button onClick={() => setQrModalData({ code: promo.code, title: promo.title })} className="p-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"><QrCodeIcon className="w-5 h-5"/></button>
+                                                <Link 
+                                                    to={`/booking?promoCode=${voucher.code}`} 
+                                                    className="flex-1 text-center bg-brand-primary text-white py-2 px-4 rounded-md font-semibold hover:bg-brand-dark transition-colors"
+                                                >
+                                                    Dùng ngay
+                                                </Link>
+                                                <button 
+                                                    onClick={() => setQrModalData({ code: voucher.code, title: voucher.title })} 
+                                                    className="p-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                                                >
+                                                    <QrCodeIcon className="w-5 h-5"/>
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                        ) : ( <p className="text-center text-gray-500 py-6">Bạn chưa có voucher nào.</p> )}
+                        ) : ( 
+                            <p className="text-center text-gray-500 py-6">Bạn chưa có voucher nào đã đổi bằng điểm.</p> 
+                        )}
                     </div>
                 </div>
             )}
@@ -481,9 +529,6 @@ export const PromotionsPage: React.FC<PromotionsPageProps> = ({ currentUser, wal
                                     : formatCurrency(promo.discountValue);
                                 return (
                                     <div key={promo.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col border-2 border-brand-primary/50">
-                                        {promo.imageUrl && (
-                                            <img src={promo.imageUrl} alt={promo.title} className="w-full h-48 object-cover" />
-                                        )}
                                         <div className="p-5 flex flex-col flex-grow">
                                             <div className="flex items-center gap-2 mb-2">
                                                 <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">ƯU ĐÃI -{discountDisplay}</span>
@@ -535,36 +580,18 @@ export const PromotionsPage: React.FC<PromotionsPageProps> = ({ currentUser, wal
                     {redeemablePrivateVouchers.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {redeemablePrivateVouchers.map(promo => {
-                                // Cast to any to safely access optional fields that may exist on some voucher shapes
-                                const pAny: any = promo as any;
-                                let discountDisplay = '';
-                                if (pAny.discountType === 'percentage' && typeof pAny.discountValue === 'number') {
-                                    discountDisplay = `${pAny.discountValue}%`;
-                                } else if (typeof pAny.discountValue === 'number') {
-                                    discountDisplay = formatCurrency(pAny.discountValue);
-                                } else if (typeof pAny.value === 'number') {
-                                    // fallback field name
-                                    discountDisplay = formatCurrency(pAny.value);
-                                } else if (pAny.label) {
-                                    discountDisplay = pAny.label;
-                                } else {
-                                    discountDisplay = '';
-                                }
-
+                                const discountDisplay = promo.discountType === 'percentage' 
+                                    ? `${promo.discountValue}%` 
+                                    : formatCurrency(promo.discountValue);
                                 const canAfford = wallet && wallet.points >= (promo.pointsRequired || 0);
-                                const imageSrc = pAny.imageUrl || pAny.image || undefined;
-                                const titleText = pAny.title || pAny.name || pAny.code || 'Voucher';
                                 return (
                                     <div key={promo.id} className={`bg-white rounded-lg shadow-md overflow-hidden flex flex-col border-2 ${canAfford ? 'border-purple-500' : 'border-gray-300'}`}>
-                                        {imageSrc && (
-                                            <img src={imageSrc} alt={titleText} className="w-full h-48 object-cover" />
-                                        )}
                                         <div className="p-5 flex flex-col flex-grow">
                                             <div className="flex items-center gap-2 mb-2">
                                                 <span className="bg-purple-500 text-white text-xs font-bold px-2 py-1 rounded">🔒 PRIVATE</span>
-                                                <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">{discountDisplay ? `-${discountDisplay}` : ''}</span>
+                                                <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">-{discountDisplay}</span>
                                             </div>
-                                            <h3 className="font-bold text-lg text-gray-800 mb-2">{titleText}</h3>
+                                            <h3 className="font-bold text-lg text-gray-800 mb-2">{promo.title}</h3>
                                             <p className="text-gray-600 text-sm mb-4 line-clamp-2">{promo.description}</p>
                                             <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
                                                 <p className="text-sm font-semibold text-purple-800">

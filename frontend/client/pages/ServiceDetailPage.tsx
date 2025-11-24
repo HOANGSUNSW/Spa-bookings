@@ -121,6 +121,8 @@ const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({ allServices, curr
         
         return applicablePromos.length > 0 ? applicablePromos[0] : null;
     }, [service, allPromotions]);
+
+
     
     const relatedServices = useMemo(() => {
         if (!service || allServices.length === 0) return [];
@@ -385,20 +387,11 @@ const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({ allServices, curr
                                 </div>
                             </div>
 
-                             {/* Action Buttons */}
-                            <div className="flex flex-col sm:flex-row gap-4">
-                                <Link 
-                                    to={`/booking?serviceId=${service.id}`} 
-                                    className="flex-1 flex items-center justify-center gap-2 bg-ocean-gradient text-white font-bold py-4 px-8 rounded-xl shadow-lg hover:shadow-cyan-500/40 hover:-translate-y-1 transition-all duration-300 text-lg"
-                                >
-                                    Đặt Lịch Ngay <ArrowRightIcon className="w-5 h-5" />
-                                </Link>
-                                 <button
-                                    onClick={handleConsultationClick}
-                                    className="flex-1 text-center bg-white text-brand-dark border-2 border-gray-100 font-bold py-4 px-8 rounded-xl hover:border-brand-primary hover:text-brand-primary transition-all duration-300"
-                                >
-                                    Tư Vấn Thêm
-                                </button>
+                            <div className="mb-6">
+                                <h3 className="font-semibold text-brand-dark mb-4">Mô tả chi tiết:</h3>
+                                <div className="text-gray-700 leading-relaxed whitespace-pre-line">
+                                    {service.description || 'Chưa có mô tả chi tiết cho dịch vụ này.'}
+                                </div>
                             </div>
                         </div>
                     </div>
