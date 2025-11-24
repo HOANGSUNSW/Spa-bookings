@@ -84,14 +84,15 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, allServices }) =
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
     
-    // Modified baseLinks: Removed 'Liên hệ', kept others.
-    const baseLinks = [
-      { path: '/', name: 'Trang chủ' },
-      { path: '/about', name: 'Giới thiệu' },
-      { path: '/services', name: 'Dịch vụ' },
-      { path: '/promotions', name: 'Ưu đãi' },
-      { path: '/booking', name: 'Đặt lịch' },
-    ];
+        // Base navigation links (including Contact)
+        const baseLinks = [
+            { path: '/', name: 'Trang chủ' },
+            { path: '/about', name: 'Giới thiệu' },
+            { path: '/services', name: 'Dịch vụ' },
+            { path: '/promotions', name: 'Ưu đãi' },
+            { path: '/booking', name: 'Đặt lịch' },
+            { path: '/contact', name: 'Liên hệ' },
+        ];
     
     const NavItem: React.FC<{ to: string, name: string, onClick?: () => void }> = ({ to, name, onClick }) => (
         <NavLink
