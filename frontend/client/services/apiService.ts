@@ -127,6 +127,7 @@ export const getUserById = async (id: string): Promise<User> => fetch(`${API_BAS
 export const getServices = async (): Promise<Service[]> => fetch(`${API_BASE_URL}/services`).then(handleResponse);
 export const getServiceById = async (id: string): Promise<Service> => fetch(`${API_BASE_URL}/services/${id}`).then(handleResponse);
 export const getAppointments = async (): Promise<Appointment[]> => fetch(`${API_BASE_URL}/appointments`).then(handleResponse);
+export const getAppointmentById = async (id: string): Promise<Appointment> => fetch(`${API_BASE_URL}/appointments/${id}`).then(handleResponse);
 export const getUserAppointments = async (userId: string): Promise<Appointment[]> => fetch(`${API_BASE_URL}/appointments/user/${userId}`).then(handleResponse);
 export const getReviews = async (filters?: { serviceId?: string; userId?: string }): Promise<Review[]> => {
     const params = new URLSearchParams(filters as any);

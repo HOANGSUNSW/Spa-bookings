@@ -1380,6 +1380,14 @@ export const BookingPage: React.FC<BookingPageProps> = ({ currentUser }) => {
                 const firstService = selectedServices[0].service;
                 const applicable = await apiService.getApplicablePromotions(currentUser.id, firstService.id);
                 setApplicablePromotions(applicable);
+                
+                // Also reload redeemed vouchers to ensure they are up-to-date
+                try {
+                    const fetchedRedeemed = await apiService.getMyRedeemedVouchers(currentUser.id);
+                    setRedeemedVouchers(fetchedRedeemed || []);
+                } catch (error) {
+                    console.error('Error fetching redeemed vouchers:', error);
+                }
             } catch (error) {
                 setApplicablePromotions([]);
             }
@@ -1612,6 +1620,17 @@ export const BookingPage: React.FC<BookingPageProps> = ({ currentUser }) => {
             // Refresh appointments AND vouchers in app
             window.dispatchEvent(new Event('refresh-appointments'));
             window.dispatchEvent(new Event('refresh-vouchers'));
+
+            // Reload redeemed vouchers immediately to update dropdown
+            if (currentUser) {
+                try {
+                    const fetchedRedeemed = await apiService.getMyRedeemedVouchers(currentUser.id);
+                    setRedeemedVouchers(fetchedRedeemed || []);
+                    console.log('✅ Reloaded redeemed vouchers after booking:', fetchedRedeemed?.length || 0);
+                } catch (error) {
+                    console.error('Error reloading redeemed vouchers:', error);
+                }
+            }
 
             // Close modal
             setIsPaymentModalOpen(false);
@@ -2089,12 +2108,33 @@ export const BookingPage: React.FC<BookingPageProps> = ({ currentUser }) => {
                                             return;
                                         }
                                         
-                                        // Search in both promotions and applicablePromotions arrays
-                                        const allPromos = [...promotions, ...applicablePromotions];
-                                        const promo = allPromos.find(p => p.code === code && p.isActive !== false);
+                                        // Tìm trong cả promotions, applicablePromotions và redeemedVouchers
+                                        const promo = redeemedVouchers.find((v: any) => 
+                                            v.code && code && 
+                                            v.code.toUpperCase().trim() === code.toUpperCase().trim() &&
+                                            v.redeemedCount > 0
+                                        ) || applicablePromotions.find(p => 
+                                            p.code && code && 
+                                            p.code.toUpperCase().trim() === code.toUpperCase().trim()
+                                        ) || promotions.find(p => 
+                                            p.code && code && 
+                                            p.code.toUpperCase().trim() === code.toUpperCase().trim() &&
+                                            (p.isPublic === true || p.isPublic === 1 || p.isPublic === '1')
+                                        );
                                         console.log('🎫 Voucher selected:', { code, found: !!promo, promo });
                                         
                                         if (promo) {
+                                            // Check if redeemed voucher still has available count
+                                            const redeemedVoucher = redeemedVouchers.find((v: any) => 
+                                                v.code && code && 
+                                                v.code.toUpperCase().trim() === code.toUpperCase().trim()
+                                            );
+                                            if (redeemedVoucher && (!redeemedVoucher.redeemedCount || redeemedVoucher.redeemedCount <= 0)) {
+                                                alert('Bạn đã sử dụng hết voucher này');
+                                                setPromoCode('');
+                                                return;
+                                            }
+                                            
                                             // Validate voucher with backend immediately
                                             try {
                                                 const selectedServiceId = selectedServices.length > 0 ? selectedServices[0].service.id : undefined;
@@ -2118,27 +2158,145 @@ export const BookingPage: React.FC<BookingPageProps> = ({ currentUser }) => {
                                     className="appearance-none w-full pl-10 pr-10 py-3.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-primary focus:border-brand-primary font-medium text-gray-700 shadow-sm hover:border-brand-primary/50 transition-all cursor-pointer"
                                 >
                                     <option value="">-- Chọn mã ưu đãi --</option>
-                                    {/* Filter and show only applicable promotions using helper function */}
+                                    {/* HIỂN THỊ CẢ VOUCHER PUBLIC VÀ VOUCHER ĐỔI ĐIỂM */}
                                     {(() => {
-                                        // Combine both promotion sources and remove duplicates
-                                        const allPromos = [...applicablePromotions, ...promotions];
-                                        const uniquePromos = allPromos.filter((promo, index, self) => 
-                                            index === self.findIndex(p => p.id === promo.id)
-                                        );
+                                        const today = new Date();
+                                        today.setHours(0, 0, 0, 0);
+                                        const selectedServiceIds = selectedServices.map(s => s.service.id);
                                         
-                                        // Filter using helper function - only show truly applicable vouchers
-                                        const availablePromos = uniquePromos.filter(promo => isPromotionApplicable(promo));
+                                        // Filter public promotions
+                                        const filteredPromotions = promotions.filter(p => {
+                                            const isPublic = p.isPublic === true || p.isPublic === 1 || p.isPublic === '1';
+                                            if (!isPublic) return false;
+                                            if (p.isActive === false) return false;
+                                            
+                                            const expiryDate = new Date(p.expiryDate);
+                                            expiryDate.setHours(0, 0, 0, 0);
+                                            if (today > expiryDate) return false;
+                                            if (p.stock !== null && p.stock <= 0) return false;
+                                            
+                                            // Parse applicableServiceIds
+                                            let applicableServiceIdsArray: string[] = [];
+                                            if (p.applicableServiceIds) {
+                                                if (typeof p.applicableServiceIds === 'string') {
+                                                    try {
+                                                        applicableServiceIdsArray = JSON.parse(p.applicableServiceIds);
+                                                    } catch (e) {
+                                                        applicableServiceIdsArray = [];
+                                                    }
+                                                } else if (Array.isArray(p.applicableServiceIds)) {
+                                                    applicableServiceIdsArray = p.applicableServiceIds;
+                                                }
+                                            }
+                                            
+                                            if (applicableServiceIdsArray && applicableServiceIdsArray.length > 0) {
+                                                const matchesService = selectedServiceIds.some(serviceId => 
+                                                    applicableServiceIdsArray.includes(serviceId)
+                                                );
+                                                if (!matchesService) return false;
+                                            }
+                                            
+                                            return isPromotionApplicable(p);
+                                        });
+                                        
+                                        // Filter applicable promotions
+                                        const filteredApplicablePromotions = applicablePromotions.filter(p => {
+                                            const isPublic = p.isPublic === true || p.isPublic === 1 || p.isPublic === '1';
+                                            if (!isPublic) return false;
+                                            if (p.isActive === false) return false;
+                                            if (p.stock !== null && p.stock <= 0) return false;
+                                            
+                                            let applicableServiceIdsArray: string[] = [];
+                                            if (p.applicableServiceIds) {
+                                                if (typeof p.applicableServiceIds === 'string') {
+                                                    try {
+                                                        applicableServiceIdsArray = JSON.parse(p.applicableServiceIds);
+                                                    } catch (e) {
+                                                        applicableServiceIdsArray = [];
+                                                    }
+                                                } else if (Array.isArray(p.applicableServiceIds)) {
+                                                    applicableServiceIdsArray = p.applicableServiceIds;
+                                                }
+                                            }
+                                            
+                                            if (applicableServiceIdsArray && applicableServiceIdsArray.length > 0) {
+                                                const matchesService = selectedServiceIds.some(serviceId => 
+                                                    applicableServiceIdsArray.includes(serviceId)
+                                                );
+                                                if (!matchesService) return false;
+                                            }
+                                            
+                                            return true;
+                                        });
+                                        
+                                        // Filter redeemed vouchers (voucher đổi điểm)
+                                        const filteredRedeemedVouchers = redeemedVouchers.filter((v: any) => {
+                                            if (!v.redeemedCount || v.redeemedCount <= 0) return false;
+                                            
+                                            if (v.applicableServiceIds && v.applicableServiceIds.length > 0) {
+                                                let applicableServiceIdsArray: string[] = [];
+                                                if (typeof v.applicableServiceIds === 'string') {
+                                                    try {
+                                                        applicableServiceIdsArray = JSON.parse(v.applicableServiceIds);
+                                                    } catch (e) {
+                                                        applicableServiceIdsArray = [];
+                                                    }
+                                                } else if (Array.isArray(v.applicableServiceIds)) {
+                                                    applicableServiceIdsArray = v.applicableServiceIds;
+                                                }
+                                                
+                                                if (applicableServiceIdsArray.length > 0) {
+                                                    const matchesService = selectedServiceIds.some(serviceId => 
+                                                        applicableServiceIdsArray.includes(serviceId)
+                                                    );
+                                                    if (!matchesService) return false;
+                                                }
+                                            }
+                                            
+                                            const expiryDate = new Date(v.expiryDate);
+                                            expiryDate.setHours(0, 0, 0, 0);
+                                            if (today > expiryDate) return false;
+                                            
+                                            if (!v.isActive) return false;
+                                            
+                                            return true;
+                                        });
+                                        
+                                        // Combine all lists
+                                        const allAvailablePromotions = [
+                                            ...filteredApplicablePromotions,
+                                            ...filteredPromotions.filter(p => {
+                                                return !filteredApplicablePromotions.some(ap => ap.id === p.id || ap.code === p.code);
+                                            }),
+                                            ...filteredRedeemedVouchers
+                                        ];
+                                        
+                                        // Remove duplicates by code
+                                        const uniquePromotionsMap = new Map<string, Promotion>();
+                                        filteredApplicablePromotions.forEach(p => {
+                                            if (p.code) uniquePromotionsMap.set(p.code, p);
+                                        });
+                                        [...filteredPromotions, ...filteredRedeemedVouchers].forEach(p => {
+                                            if (p.code && !uniquePromotionsMap.has(p.code)) {
+                                                uniquePromotionsMap.set(p.code, p);
+                                            }
+                                        });
+                                        const uniquePromotions = Array.from(uniquePromotionsMap.values());
 
-                                        if (availablePromos.length === 0) {
+                                        if (uniquePromotions.length === 0) {
                                             return (
                                                 <option value="" disabled>Không có mã ưu đãi khả dụng</option>
                                             );
                                         }
 
-                                        return availablePromos.map(promo => (
+                                        return uniquePromotions.map((promo: any) => (
                                             <option key={promo.id} value={promo.code}>
-                                                {promo.code} - {promo.title} {promo.discountType === 'percentage' ? `(-${promo.discountValue}%)` : `(-${formatPrice(promo.discountValue)})`}
+                                                {promo.code} - {promo.title} 
+                                                {promo.discountType === 'percentage' 
+                                                    ? ` (Giảm ${promo.discountValue}%)` 
+                                                    : ` (Giảm ${formatPrice(promo.discountValue)})`}
                                                 {promo.minOrderValue ? ` (Đơn tối thiểu: ${formatPrice(promo.minOrderValue)})` : ''}
+                                                {promo.redeemedCount && promo.redeemedCount > 1 ? ` [Bạn có ${promo.redeemedCount} voucher]` : promo.redeemedCount ? ' [Voucher đã đổi]' : ''}
                                             </option>
                                         ));
                                     })()}

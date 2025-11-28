@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Appointment, TreatmentCourse, User, Service, Review } from '../../types';
 import { BellIcon, XCircleIcon, StarIcon } from '../../shared/icons';
 import * as apiService from '../services/apiService';
+import { formatDateDDMMYYYY, parseDDMMYYYYToYYYYMMDD } from '../../shared/dateUtils';
 
 
 interface AppointmentsPageProps {
@@ -33,6 +34,11 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
     const [upcomingSort, setUpcomingSort] = useState('date-asc');
     const [upcomingFilterService, setUpcomingFilterService] = useState('all');
     const [upcomingFilterTime, setUpcomingFilterTime] = useState('all');
+    const [dateRangeStart, setDateRangeStart] = useState<string>(''); // YYYY-MM-DD format for filtering
+    const [dateRangeEnd, setDateRangeEnd] = useState<string>(''); // YYYY-MM-DD format for filtering
+    const [dateRangeStartDisplay, setDateRangeStartDisplay] = useState<string>(''); // DD/MM/YYYY format for display
+    const [dateRangeEndDisplay, setDateRangeEndDisplay] = useState<string>(''); // DD/MM/YYYY format for display
+    const [currentMonth, setCurrentMonth] = useState(new Date());
     
     const [historySort, setHistorySort] = useState('date-desc');
     const [historyFilterService, setHistoryFilterService] = useState('all');
@@ -102,6 +108,25 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
             fetchReviews();
         }
     }, [currentUser.id]);
+
+    // Sync display values when dateRangeStart or dateRangeEnd changes
+    useEffect(() => {
+        if (dateRangeStart) {
+            const formatted = formatDateDDMMYYYY(new Date(dateRangeStart)).replace(/-/g, '/');
+            setDateRangeStartDisplay(formatted);
+        } else {
+            setDateRangeStartDisplay('');
+        }
+    }, [dateRangeStart]);
+
+    useEffect(() => {
+        if (dateRangeEnd) {
+            const formatted = formatDateDDMMYYYY(new Date(dateRangeEnd)).replace(/-/g, '/');
+            setDateRangeEndDisplay(formatted);
+        } else {
+            setDateRangeEndDisplay('');
+        }
+    }, [dateRangeEnd]);
 
     // Update local treatment courses when prop changes
     useEffect(() => {
@@ -206,7 +231,15 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
         // Upcoming appointments: include 'pending' (awaiting admin confirmation), 'upcoming' (confirmed), and 'in-progress'
         // Also include appointments that are in the future (even if status is pending)
         const upcoming = myApps
-            .map(app => ({...app, dateTime: new Date(`${app.date}T${app.time}`) }))
+            .map(app => {
+                // Preserve original date string to avoid timezone issues
+                const originalDate = typeof app.date === 'string' ? app.date.split('T')[0] : app.date;
+                // Create dateTime in local timezone
+                const [hours, minutes] = app.time.split(':').map(Number);
+                const [year, month, day] = originalDate.split('-').map(Number);
+                const dateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
+                return {...app, date: originalDate, dateTime };
+            })
             .filter(app => {
                 // Include if status is pending, upcoming, or in-progress
                 const isUpcomingStatus = ['upcoming', 'pending', 'in-progress'].includes(app.status);
@@ -251,8 +284,36 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
     }, [localAppointments, localTreatmentCourses, currentUser.id]);
 
     const reminders = useMemo(() => {
-        const twentyFourHoursFromNow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        return myUpcomingAppointments.filter(app => app.dateTime <= twentyFourHoursFromNow);
+        const now = new Date();
+        const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        
+        return myUpcomingAppointments.filter(app => {
+            // Create dateTime in local timezone to avoid timezone issues
+            // app.date is in YYYY-MM-DD format, app.time is in HH:mm format
+            const [hours, minutes] = app.time.split(':').map(Number);
+            
+            // Ensure app.date is a string in YYYY-MM-DD format
+            let dateStr: string | Date = app.date;
+            // Check if dateStr is a Date object using Object.prototype.toString
+            const isDateObject = typeof dateStr === 'object' && dateStr !== null && Object.prototype.toString.call(dateStr) === '[object Date]';
+            if (isDateObject) {
+                const dateObj = dateStr as unknown as Date;
+                const year = dateObj.getFullYear();
+                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                dateStr = `${year}-${month}-${day}`;
+            } else if (typeof dateStr === 'string') {
+                // Remove any time portion if present
+                dateStr = dateStr.split('T')[0];
+            }
+            
+            // Parse date manually to avoid UTC timezone issues
+            const [year, month, day] = dateStr.split('-').map(Number);
+            const appointmentDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+            
+            // Check if appointment is within 24 hours from now
+            return appointmentDate >= now && appointmentDate <= twentyFourHoursFromNow;
+        });
     }, [myUpcomingAppointments]);
 
     // Helper function to get time range boundaries
@@ -419,12 +480,26 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
             filtered = filtered.filter(app => app.serviceId === upcomingFilterService);
         }
         
-        filtered = filterByTime(filtered, upcomingFilterTime);
+        // Filter by date range if provided
+        if (dateRangeStart && dateRangeEnd) {
+            const startDate = new Date(dateRangeStart);
+            startDate.setHours(0, 0, 0, 0);
+            const endDate = new Date(dateRangeEnd);
+            endDate.setHours(23, 59, 59, 999);
+            
+            filtered = filtered.filter(app => {
+                const appDate = new Date(app.dateTime);
+                return appDate >= startDate && appDate <= endDate;
+            });
+        } else {
+            // If no date range, use time filter
+            filtered = filterByTime(filtered, upcomingFilterTime);
+        }
 
         filtered.sort((a, b) => upcomingSort === 'date-asc' ? a.dateTime.getTime() - b.dateTime.getTime() : b.dateTime.getTime() - a.dateTime.getTime());
         
         return filtered;
-    }, [myUpcomingAppointments, upcomingSort, upcomingFilterService, upcomingFilterTime]);
+    }, [myUpcomingAppointments, upcomingSort, upcomingFilterService, upcomingFilterTime, dateRangeStart, dateRangeEnd]);
     
     const displayHistory = useMemo(() => {
         let filtered = [...myHistoryAppointments];
@@ -911,20 +986,79 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
                     {activeTab === 'upcoming' && (
                         <div className="space-y-6">
                             <div className="bg-white p-4 rounded-lg shadow-md grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                                <select value={upcomingSort} onChange={e => setUpcomingSort(e.target.value)} className="w-full p-2 border rounded-md bg-white">
-                                    <option value="date-asc">Sắp xếp theo: Ngày hẹn (Gần nhất)</option>
-                                    <option value="date-desc">Sắp xếp theo: Ngày hẹn (Xa nhất)</option>
-                                </select>
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm font-medium text-gray-700">Xem lịch từ (dd/mm/yyyy)</label>
+                                    <div className="relative">
+                                        <input
+                                            type="date"
+                                            value={dateRangeStart}
+                                            onChange={(e) => {
+                                                const yyyyMMdd = e.target.value;
+                                                setDateRangeStart(yyyyMMdd);
+                                                if (yyyyMMdd) {
+                                                    const formatted = formatDateDDMMYYYY(new Date(yyyyMMdd)).replace(/-/g, '/');
+                                                    setDateRangeStartDisplay(formatted);
+                                                } else {
+                                                    setDateRangeStartDisplay('');
+                                                }
+                                                setUpcomingFilterTime('all'); // Clear time filter when using date range
+                                            }}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                        />
+                                        <div className="w-full p-2 pr-10 border rounded-md bg-white pointer-events-none flex items-center min-h-[42px]">
+                                            <span className={dateRangeStartDisplay ? 'text-gray-800' : 'text-gray-400'}>
+                                                {dateRangeStartDisplay || 'dd/mm/yyyy'}
+                                            </span>
+                                            <svg
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm font-medium text-gray-700">đến (dd/mm/yyyy)</label>
+                                    <div className="relative">
+                                        <input
+                                            type="date"
+                                            value={dateRangeEnd}
+                                            onChange={(e) => {
+                                                const yyyyMMdd = e.target.value;
+                                                setDateRangeEnd(yyyyMMdd);
+                                                if (yyyyMMdd) {
+                                                    const formatted = formatDateDDMMYYYY(new Date(yyyyMMdd)).replace(/-/g, '/');
+                                                    setDateRangeEndDisplay(formatted);
+                                                } else {
+                                                    setDateRangeEndDisplay('');
+                                                }
+                                                setUpcomingFilterTime('all'); // Clear time filter when using date range
+                                            }}
+                                            min={dateRangeStart || undefined}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                        />
+                                        <div className="w-full p-2 pr-10 border rounded-md bg-white pointer-events-none flex items-center min-h-[42px]">
+                                            <span className={dateRangeEndDisplay ? 'text-gray-800' : 'text-gray-400'}>
+                                                {dateRangeEndDisplay || 'dd/mm/yyyy'}
+                                            </span>
+                                            <svg
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
                                 <select value={upcomingFilterService} onChange={e => setUpcomingFilterService(e.target.value)} className="w-full p-2 border rounded-md bg-white">
                                     <option value="all">Lọc theo dịch vụ</option>
                                     {serviceFilterOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </select>
-                                <div className="flex items-center justify-center gap-2">
-                                    {['all', 'today', 'this-week', 'this-month'].map(filter => {
-                                        const labels: Record<string, string> = {all: 'Tất cả', today: 'Hôm nay', 'this-week': 'Tuần này', 'this-month': 'Tháng này'};
-                                        return <button key={filter} onClick={() => setUpcomingFilterTime(filter)} className={`px-3 py-1.5 text-sm font-semibold rounded-full ${upcomingFilterTime === filter ? 'bg-brand-primary text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>{labels[filter]}</button>
-                                    })}
-                                </div>
                             </div>
                             
                             {reminders.length > 0 && (
@@ -934,7 +1068,59 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
                                         <h4 className="font-bold">Nhắc nhở lịch hẹn!</h4>
                                         <p className="text-sm">Bạn có lịch hẹn sau đây trong vòng 24 giờ tới:</p>
                                         <ul className="list-disc list-inside text-sm mt-1">
-                                            {reminders.map(app => <li key={app.id}><strong>{app.serviceName}</strong> lúc {app.time} ngày {app.dateTime.toLocaleDateString('vi-VN')}</li>)}
+                                            {reminders.map(app => {
+                                                // Format date correctly using app.date (YYYY-MM-DD) to avoid timezone issues
+                                                // app.date is guaranteed to be in YYYY-MM-DD format from the API
+                                                // Handle both string and Date object cases
+                                                let dateStr = app.date;
+                                                
+                                                // Debug: log original date value
+                                                const isDateObj = typeof app.date === 'object' && app.date !== null && Object.prototype.toString.call(app.date) === '[object Date]';
+                                                console.log('Reminder date debug:', {
+                                                    originalDate: app.date,
+                                                    dateType: typeof app.date,
+                                                    isDate: isDateObj,
+                                                    serviceName: app.serviceName,
+                                                    time: app.time
+                                                });
+                                                
+                                                // Check if dateStr is a Date object using Object.prototype.toString
+                                                const isDateObject = typeof dateStr === 'object' && dateStr !== null && Object.prototype.toString.call(dateStr) === '[object Date]';
+                                                if (isDateObject) {
+                                                    // If it's a Date object, convert to YYYY-MM-DD string using local timezone
+                                                    const dateObj = dateStr as unknown as Date;
+                                                    const year = dateObj.getFullYear();
+                                                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                                    const day = String(dateObj.getDate()).padStart(2, '0');
+                                                    dateStr = `${year}-${month}-${day}`;
+                                                } else if (typeof dateStr === 'string') {
+                                                    // If it's already a string, use it directly
+                                                    // Remove any time portion if present (e.g., "2025-11-30T00:00:00.000Z" -> "2025-11-30")
+                                                    dateStr = dateStr.split('T')[0];
+                                                }
+                                                
+                                                const dateParts = dateStr.split('-');
+                                                if (dateParts.length === 3) {
+                                                    const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+                                                    console.log('Formatted reminder date:', {
+                                                        original: app.date,
+                                                        processed: dateStr,
+                                                        formatted: formattedDate
+                                                    });
+                                                    return (
+                                                        <li key={app.id}>
+                                                            <strong>{app.serviceName}</strong> lúc {app.time} ngày {formattedDate}
+                                                        </li>
+                                                    );
+                                                } else {
+                                                    // Fallback: use original date string
+                                                    return (
+                                                        <li key={app.id}>
+                                                            <strong>{app.serviceName}</strong> lúc {app.time} ngày {dateStr}
+                                                        </li>
+                                                    );
+                                                }
+                                            })}
                                         </ul>
                                     </div>
                                 </div>
@@ -946,29 +1132,149 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
                                     <p className="text-gray-500">Đang tải lịch hẹn...</p>
                                 </div>
                             ) : displayUpcoming.length > 0 ? (
-                                Object.entries(groupAppointmentsByDate(displayUpcoming)).map(([dateString, appointments]) => (
-                                    <div key={dateString}>
-                                        {/* Date header */}
-                                        <div 
-                                            className="bg-gradient-to-r from-brand-secondary to-amber-50 p-4 rounded-lg flex items-center justify-between mb-3"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-2xl font-bold text-brand-primary">{dateString.split(',')[0].split(' ')[1]}</span>
-                                                <div>
-                                                    <p className="font-semibold text-gray-800">{dateString}</p>
-                                                    <p className="text-sm text-gray-600">{appointments.length} lịch hẹn</p>
-                                                </div>
+                                (() => {
+                                    // Render calendar view
+                                    const year = currentMonth.getFullYear();
+                                    const month = currentMonth.getMonth();
+                                    
+                                    // Get first day of month and how many days
+                                    const firstDay = new Date(year, month, 1);
+                                    const lastDay = new Date(year, month + 1, 0);
+                                    const daysInMonth = lastDay.getDate();
+                                    const startingDayOfWeek = firstDay.getDay();
+                                    
+                                    // Adjust for Monday as first day (0 = Monday, 6 = Sunday)
+                                    const adjustedStartingDay = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1;
+                                    
+                                    const days: (Date | null)[] = [];
+                                    
+                                    // Add empty cells for days before month starts
+                                    for (let i = 0; i < adjustedStartingDay; i++) {
+                                        days.push(null);
+                                    }
+                                    
+                                    // Add all days of the month
+                                    for (let day = 1; day <= daysInMonth; day++) {
+                                        days.push(new Date(year, month, day));
+                                    }
+                                    
+                                    // Group appointments by date
+                                    const appointmentsByDate = new Map<string, (Appointment & { dateTime: Date })[]>();
+                                    displayUpcoming.forEach(app => {
+                                        // Ensure app.date is in YYYY-MM-DD format
+                                        let dateKey = app.date;
+                                        if (typeof dateKey === 'string') {
+                                            dateKey = dateKey.split('T')[0]; // Remove time portion if present
+                                        } else {
+                                            // If it's a Date object, format it
+                                            const isDateObject = typeof dateKey === 'object' && dateKey !== null && Object.prototype.toString.call(dateKey) === '[object Date]';
+                                            if (isDateObject) {
+                                                const dateObj = dateKey as unknown as Date;
+                                                const year = dateObj.getFullYear();
+                                                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                                const day = String(dateObj.getDate()).padStart(2, '0');
+                                                dateKey = `${year}-${month}-${day}`;
+                                            } else {
+                                                dateKey = String(dateKey).split('T')[0];
+                                            }
+                                        }
+                                        if (!appointmentsByDate.has(dateKey)) {
+                                            appointmentsByDate.set(dateKey, []);
+                                        }
+                                        appointmentsByDate.get(dateKey)!.push(app);
+                                    });
+                                    
+                                    const weekDays = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
+                                    
+                                    return (
+                                        <div className="bg-white p-6 rounded-lg shadow-md">
+                                            {/* Month navigation */}
+                                            <div className="flex items-center justify-between mb-6">
+                                                <button
+                                                    onClick={() => {
+                                                        const prevMonth = new Date(currentMonth);
+                                                        prevMonth.setMonth(prevMonth.getMonth() - 1);
+                                                        setCurrentMonth(prevMonth);
+                                                    }}
+                                                    className="px-4 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                                                >
+                                                    ‹ Tháng trước
+                                                </button>
+                                                <h2 className="text-xl font-bold text-gray-800">
+                                                    {currentMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}
+                                                </h2>
+                                                <button
+                                                    onClick={() => {
+                                                        const nextMonth = new Date(currentMonth);
+                                                        nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                                        setCurrentMonth(nextMonth);
+                                                    }}
+                                                    className="px-4 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                                                >
+                                                    Tháng sau ›
+                                                </button>
+                                            </div>
+                                            
+                                            {/* Calendar grid */}
+                                            <div className="grid grid-cols-7 gap-2">
+                                                {/* Week day headers */}
+                                                {weekDays.map(day => (
+                                                    <div key={day} className="p-2 text-center font-semibold text-gray-700 bg-gray-50 rounded">
+                                                        {day}
+                                                    </div>
+                                                ))}
+                                                
+                                                {/* Calendar days */}
+                                                {days.map((date, index) => {
+                                                    if (!date) {
+                                                        return <div key={`empty-${index}`} className="p-2 min-h-[100px] border border-gray-200 rounded bg-gray-50"></div>;
+                                                    }
+                                                    
+                                                    // Format date as YYYY-MM-DD using local date (not UTC)
+                                                    const year = date.getFullYear();
+                                                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                                                    const day = String(date.getDate()).padStart(2, '0');
+                                                    const dateKey = `${year}-${month}-${day}`;
+                                                    const dayAppointments = appointmentsByDate.get(dateKey) || [];
+                                                    const isToday = date.toDateString() === new Date().toDateString();
+                                                    
+                                                    return (
+                                                        <div
+                                                            key={dateKey}
+                                                            className={`p-2 min-h-[100px] border rounded ${isToday ? 'border-brand-primary bg-brand-secondary' : 'border-gray-200 bg-white'} hover:bg-gray-50 transition-colors`}
+                                                        >
+                                                            <div className={`text-sm font-semibold mb-1 ${isToday ? 'text-brand-primary' : 'text-gray-800'}`}>
+                                                                {date.getDate()}
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                {dayAppointments.map(app => {
+                                                                    const getStatusColor = () => {
+                                                                        if (app.status === 'pending') return 'bg-yellow-100 text-yellow-800';
+                                                                        if (app.status === 'upcoming') return 'bg-blue-100 text-blue-800';
+                                                                        if (app.status === 'in-progress') return 'bg-purple-100 text-purple-800';
+                                                                        return 'bg-gray-100 text-gray-800';
+                                                                    };
+                                                                    
+                                                                    return (
+                                                                        <div
+                                                                            key={app.id}
+                                                                            onClick={() => setViewingAppointment(app)}
+                                                                            className={`text-xs p-1.5 rounded cursor-pointer transition-shadow hover:shadow-md ${getStatusColor()}`}
+                                                                            title={`${app.time} - ${app.serviceName}`}
+                                                                        >
+                                                                            <div className="font-semibold truncate">{app.time}</div>
+                                                                            <div className="truncate font-medium">{app.serviceName}</div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
-                                        
-                                        {/* All appointments displayed */}
-                                        <div className="space-y-3 ml-4 mb-6">
-                                            {appointments.map(app => (
-                                                <UpcomingAppointmentCard key={app.id} appointment={app} />
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))
+                                    );
+                                })()
                             ) : (
                                 <p className="text-center text-gray-500 py-10">Không có lịch hẹn sắp tới.</p>
                             )}

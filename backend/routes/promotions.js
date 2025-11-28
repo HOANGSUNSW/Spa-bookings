@@ -775,25 +775,52 @@ router.post('/apply/:code', async (req, res) => {
         }
 
         // Check if user has already used this promotion
+        // QUAN TRỌNG: Chỉ reject nếu PromotionUsage có appointmentId != null (đã dùng)
+        // Nếu appointmentId = null, nghĩa là voucher đổi điểm chưa dùng, vẫn cho phép áp dụng
         if (userId) {
-            const existingUsage = await db.PromotionUsage.findOne({
-                where: { userId, promotionId: promotion.id }
-            });
-
-            if (existingUsage) {
-                // For Birthday promotions, check if used this year
-                if (promotion.targetAudience === 'Birthday') {
-                    const usedYear = new Date(existingUsage.usedAt).getFullYear();
-                    if (usedYear === today.getFullYear()) {
-                        return res.status(400).json({ message: 'Bạn đã sử dụng mã khuyến mãi sinh nhật trong năm này' });
+            const normalizedIsPublic = promotion.isPublic === true || promotion.isPublic === 1 || promotion.isPublic === '1';
+            
+            if (normalizedIsPublic) {
+                // Voucher public: Kiểm tra xem đã dùng chưa (có PromotionUsage với appointmentId != null)
+                const usedUsage = await db.PromotionUsage.findOne({
+                    where: { 
+                        userId, 
+                        promotionId: promotion.id,
+                        appointmentId: { [Op.ne]: null } // Đã được dùng (có appointmentId)
                     }
-                } else {
-                    return res.status(400).json({ message: 'Bạn đã sử dụng mã khuyến mãi này rồi' });
+                });
+
+                if (usedUsage) {
+                    // For Birthday promotions, check if used this year
+                    if (promotion.targetAudience === 'Birthday') {
+                        const usedYear = new Date(usedUsage.usedAt).getFullYear();
+                        if (usedYear === today.getFullYear()) {
+                            return res.status(400).json({ message: 'Bạn đã sử dụng mã khuyến mãi sinh nhật trong năm này' });
+                        }
+                    } else if (promotion.targetAudience === 'New Clients') {
+                        return res.status(400).json({ message: 'Bạn đã sử dụng mã khuyến mãi này rồi' });
+                    } else {
+                        // Voucher public thường: có thể dùng nhiều lần nếu còn stock
+                        // Không reject ở đây, để stock check xử lý
+                    }
+                }
+            } else {
+                // Voucher đổi điểm (isPublic = false): Kiểm tra xem có voucher chưa dùng không
+                const unusedRedeemedUsage = await db.PromotionUsage.findOne({
+                    where: { 
+                        userId, 
+                        promotionId: promotion.id,
+                        appointmentId: { [Op.is]: null } // Chưa dùng (appointmentId = null)
+                    }
+                });
+
+                if (!unusedRedeemedUsage) {
+                    return res.status(400).json({ message: 'Bạn không còn voucher này để sử dụng. Vui lòng đổi điểm để lấy thêm voucher.' });
                 }
             }
         }
 
-        // Decrement stock (trừ 1)
+        // Decrement stock (trừ 1) - trừ ngay khi validate
         if (promotion.stock !== null) {
             await promotion.decrement('stock', { by: 1 });
         }
@@ -963,7 +990,7 @@ router.get('/my-redeemed/:userId', async (req, res) => {
         });
 
         // Convert to array format with redeemedCount
-        const redeemedVouchers = Object.values(voucherCounts).map(({ promotion, count }) => {
+        let redeemedVouchers = Object.values(voucherCounts).map(({ promotion, count }) => {
             const promoData = promotion.toJSON ? promotion.toJSON() : promotion;
             // Normalize isActive and isPublic to boolean
             const normalized = {
@@ -975,9 +1002,23 @@ router.get('/my-redeemed/:userId', async (req, res) => {
             return normalized;
         });
 
-        console.log(`   ✅ Returning ${redeemedVouchers.length} unique redeemed vouchers`);
+        // Filter: Voucher đổi điểm (isPublic = false) - chỉ hiển thị nếu stock > 0
+        // Khi stock = 0, voucher sẽ biến mất khỏi "Ưu đãi của tôi"
+        redeemedVouchers = redeemedVouchers.filter(v => {
+            // Nếu là voucher đổi điểm (isPublic = false) và có stock
+            if (!v.isPublic && v.stock !== null) {
+                // Chỉ hiển thị nếu stock > 0
+                if (v.stock <= 0) {
+                    console.log(`   ⚠️ Filtering out voucher ${v.code || v.id}: stock = ${v.stock} (voucher đổi điểm hết stock)`);
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        console.log(`   ✅ Returning ${redeemedVouchers.length} unique redeemed vouchers (after stock filter)`);
         redeemedVouchers.forEach(v => {
-            console.log(`      - ${v.code || v.id}: redeemedCount = ${v.redeemedCount}`);
+            console.log(`      - ${v.code || v.id}: redeemedCount = ${v.redeemedCount}, stock = ${v.stock}`);
         });
         console.log(`🔍 [GET /my-redeemed/${userId}] ==========================================\n`);
 

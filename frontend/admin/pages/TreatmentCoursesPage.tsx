@@ -186,21 +186,22 @@ const TreatmentCoursesPage: React.FC<TreatmentCoursesPageProps> = ({ allUsers, a
     const startIndex = (currentPage - 1) * itemsPerPage;
     const paginatedCourses = filteredCourses.slice(startIndex, startIndex + itemsPerPage);
 
-    // Stats - calculate based on allCourses, not filtered courses
+    // Stats - calculate based on filteredCourses (số lượng hiển thị) and only courses with confirmed appointments
     const stats = useMemo(() => {
+        // Only count courses that have confirmed appointments (already filtered in 'courses' state)
+        // Use filteredCourses to reflect the current filter/search state
         return {
-            total: allCourses.length,
-            active: allCourses.filter(c => c.status === 'active').length,
-            completed: allCourses.filter(c => c.status === 'completed').length,
-            expired: allCourses.filter(c => c.status === 'expired' || (c.expiryDate && new Date(c.expiryDate) < new Date())).length,
-            expiringSoon: allCourses.filter(c => {
+            total: filteredCourses.length,
+            active: filteredCourses.filter(c => c.status === 'active').length,
+            completed: filteredCourses.filter(c => c.status === 'completed').length,
+            expired: filteredCourses.filter(c => c.status === 'expired' || (c.expiryDate && new Date(c.expiryDate) < new Date())).length,
+            expiringSoon: filteredCourses.filter(c => {
                 if (!c.expiryDate) return false;
                 const days = getDaysUntilExpiry(c.expiryDate);
                 return days > 0 && days <= 7;
-            }).length,
-            pending: allCourses.filter(c => c.status === 'pending').length
+            }).length
         };
-    }, [allCourses]);
+    }, [filteredCourses]);
 
     if (isLoading) {
         return (
@@ -219,7 +220,7 @@ const TreatmentCoursesPage: React.FC<TreatmentCoursesPageProps> = ({ allUsers, a
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                     <div className="text-sm text-gray-600">Tổng số</div>
                     <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
@@ -227,10 +228,6 @@ const TreatmentCoursesPage: React.FC<TreatmentCoursesPageProps> = ({ allUsers, a
                 <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                     <div className="text-sm text-gray-600">Đang hoạt động</div>
                     <div className="text-2xl font-bold text-green-600">{stats.active}</div>
-                </div>
-                <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                    <div className="text-sm text-gray-600">Chờ xác nhận</div>
-                    <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
                 </div>
                 <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                     <div className="text-sm text-gray-600">Hoàn thành</div>
@@ -250,7 +247,7 @@ const TreatmentCoursesPage: React.FC<TreatmentCoursesPageProps> = ({ allUsers, a
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
                 <div className="border-b border-gray-200 px-6 py-4">
                     <h2 className="text-lg font-semibold text-gray-800">
-                        Liệu trình ({allCourses.length})
+                        Liệu trình ({filteredCourses.length})
                     </h2>
                 </div>
             </div>
