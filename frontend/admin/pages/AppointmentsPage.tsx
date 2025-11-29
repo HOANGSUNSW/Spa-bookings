@@ -493,9 +493,36 @@ const AdminAppointmentsPage: React.FC<AdminAppointmentsPageProps> = ({ allUsers,
 
     const stats = useMemo(() => {
         if (isLoading || error) return { pending: 0, upcoming: 0, completed: 0, cancelled: 0, inProgress: 0 };
+        
+        // "Đã xác nhận" = số lần admin xác nhận, không phải số appointments
+        // Logic: Mỗi bookingGroupId (liệu trình) chỉ đếm 1 lần, dù có nhiều buổi
+        // Appointments không có bookingGroupId (single appointments) đếm từng cái một
+        
+        // Lấy tất cả appointments đã được xác nhận (status: 'upcoming' hoặc 'scheduled')
+        const confirmedAppointments = appointments.filter(a => 
+            (a.status === 'upcoming' || a.status === 'scheduled')
+        );
+        
+        // Nhóm các appointments đã xác nhận theo bookingGroupId
+        const confirmedBookingGroups = new Set<string>();
+        let singleConfirmedAppointments = 0; // Appointments không có bookingGroupId
+        
+        confirmedAppointments.forEach(apt => {
+            if (apt.bookingGroupId) {
+                // Có bookingGroupId: nhóm lại, mỗi group chỉ đếm 1 lần
+                confirmedBookingGroups.add(apt.bookingGroupId);
+            } else {
+                // Không có bookingGroupId: đếm từng appointment
+                singleConfirmedAppointments++;
+            }
+        });
+        
+        // Tổng số lần xác nhận = số booking groups + số single appointments
+        const totalConfirmed = confirmedBookingGroups.size + singleConfirmedAppointments;
+        
         return {
             pending: appointments.filter(a => a.status === 'pending').length,
-            upcoming: appointments.filter(a => a.status === 'upcoming').length,
+            upcoming: totalConfirmed, // Số lần admin xác nhận (mỗi booking group = 1 lần)
             completed: appointments.filter(a => a.status === 'completed').length,
             cancelled: appointments.filter(a => a.status === 'cancelled').length,
             inProgress: appointments.filter(a => a.status === 'in-progress').length,

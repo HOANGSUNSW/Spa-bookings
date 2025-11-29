@@ -10,7 +10,8 @@
     "db:migrate": "sequelize-cli db:migrate",
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:migrate:undo:all": "sequelize-cli db:migrate:undo:all",
-    "db:migrate:status": "sequelize-cli db:migrate:status"
+    "db:migrate:status": "sequelize-cli db:migrate:status",
+    "cleanup:promotion-usage": "node scripts/cleanup-duplicate-promotion-usage.js"
   },
   "keywords": [],
   "author": "AI Assistant",

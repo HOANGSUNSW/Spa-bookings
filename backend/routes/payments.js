@@ -323,16 +323,11 @@ router.post('/', async (req, res) => {
         
         res.status(201).json(createdPayment);
 
-        // Notify admins about payment (async, don't wait)
-        const user = await db.User.findByPk(newPaymentData.userId);
-        const userName = user ? user.name : 'Khách hàng';
-        const formatPrice = (price) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
-        notifyAdmins(
-            'payment_received',
-            'Thanh toán mới',
-            `${userName} đã thanh toán ${formatPrice(newPaymentData.amount)} qua ${newPaymentData.method}`,
-            createdPayment.id
-        );
+        // KHÔNG tạo thông báo ở đây vì đây chỉ là tạo payment record (đặt lịch), chưa thanh toán
+        // Thông báo chỉ được tạo khi:
+        // 1. Admin xác nhận thanh toán (PUT /api/payments/:id/complete hoặc PUT /api/treatment-courses/:id/confirm-payment)
+        // 2. VNPay payment thành công (VNPay return/IPN handler)
+        // 3. Payment status = 'Completed'
     } catch (error) {
         console.error('Error creating payment:', error);
         res.status(500).json({ message: 'Internal server error' });
@@ -349,7 +344,35 @@ router.put('/:id', async (req, res) => {
             return res.status(404).json({ message: 'Payment not found' });
         }
 
+        // Lưu oldStatus trước khi update để kiểm tra xem có tạo thông báo không
+        const oldStatus = payment.status;
+
         await payment.update(updatedPaymentData);
+
+        // CHỈ tạo thông báo khi status thực sự chuyển từ 'Pending' sang 'Completed'
+        // KHÔNG tạo thông báo nếu payment status vẫn là 'Pending' hoặc đã là 'Completed' từ trước
+        if (oldStatus === 'Pending' && updatedPaymentData.status === 'Completed' && payment.status === 'Completed') {
+            try {
+                const user = await db.User.findByPk(payment.userId);
+                const userName = user ? user.name : 'Khách hàng';
+                const formatPrice = (price) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
+                const serviceName = payment.serviceName || 'dịch vụ';
+                
+                console.log(`🔔 [UPDATE PAYMENT] Creating notification - Payment status changed from 'Pending' to 'Completed'`);
+                notifyAdmins(
+                    'payment_received',
+                    'Thanh toán tiền mặt',
+                    `${userName} đã thanh toán ${formatPrice(payment.amount)} bằng tiền mặt cho ${serviceName}`,
+                    payment.id
+                );
+            } catch (notifError) {
+                console.error('Error creating payment notification:', notifError);
+                // Don't fail payment if notification fails
+            }
+        } else {
+            console.log(`ℹ️ [UPDATE PAYMENT] Skipped notification - Payment oldStatus: ${oldStatus || 'null'}, currentStatus: ${payment.status || 'null'}`);
+        }
+
         res.json(payment);
     } catch (error) {
         console.error('Error updating payment:', error);
@@ -407,6 +430,31 @@ router.put('/:id/complete', async (req, res) => {
             }
         } else if (oldStatus === 'Completed') {
             console.log(`⚠️ [COMPLETE PAYMENT] Payment ${payment.id} already completed, skipping wallet update`);
+        }
+
+        // Notify admins about completed payment (async, don't wait)
+        // QUAN TRỌNG: Chỉ tạo thông báo khi payment status thực sự chuyển từ 'Pending' sang 'Completed'
+        // KHÔNG tạo thông báo nếu payment đã là 'Completed' từ trước
+        if (oldStatus === 'Pending' && payment.status === 'Completed') {
+            try {
+                const user = await db.User.findByPk(payment.userId);
+                const userName = user ? user.name : 'Khách hàng';
+                const formatPrice = (price) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
+                const serviceName = payment.serviceName || 'dịch vụ';
+                
+                console.log(`🔔 [COMPLETE PAYMENT] Creating notification - Payment status changed from 'Pending' to 'Completed'`);
+                notifyAdmins(
+                    'payment_received',
+                    'Thanh toán tiền mặt',
+                    `${userName} đã thanh toán ${formatPrice(payment.amount)} bằng tiền mặt cho ${serviceName}`,
+                    payment.id
+                );
+            } catch (notifError) {
+                console.error('Error creating payment notification:', notifError);
+                // Don't fail payment if notification fails
+            }
+        } else {
+            console.log(`ℹ️ [COMPLETE PAYMENT] Skipped notification - Payment oldStatus: ${oldStatus || 'null'}, currentStatus: ${payment.status || 'null'}`);
         }
         
         res.json(payment);
@@ -559,16 +607,9 @@ router.post('/process', async (req, res) => {
 
                 res.json({ payment, success: true });
 
-                // Notify admins about cash payment (async, don't wait)
-                const user = await db.User.findByPk(appointment.userId);
-                const userName = user ? user.name : 'Khách hàng';
-                const formatPrice = (price) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
-                notifyAdmins(
-                    'payment_received',
-                    'Thanh toán tiền mặt',
-                    `${userName} đã thanh toán ${formatPrice(amount)} bằng tiền mặt cho ${appointment.serviceName}`,
-                    payment.id
-                );
+                // KHÔNG tạo thông báo ở đây vì payment status là 'Pending', chưa thanh toán
+                // Thông báo chỉ được tạo khi admin xác nhận thanh toán (PUT /api/payments/:id/complete)
+                // hoặc khi payment status chuyển sang 'Completed'
             } catch (cashError) {
                 console.error('Error processing cash payment:', cashError);
                 console.error('Error stack:', cashError.stack);

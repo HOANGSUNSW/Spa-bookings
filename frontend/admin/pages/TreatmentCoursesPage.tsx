@@ -30,14 +30,46 @@ const TreatmentCoursesPage: React.FC<TreatmentCoursesPageProps> = ({ allUsers, a
         loadData();
     }, []);
 
-    // Helper function to check if a course has confirmed appointments
+    // Helper function to check if a course has confirmed appointments (appointments that admin has approved)
     const hasConfirmedAppointments = (course: TreatmentCourse): boolean => {
-        // Check if course has any appointments with status 'scheduled' or 'upcoming' (confirmed statuses)
-        const courseAppointments = appointments.filter(apt => 
-            apt.serviceId === course.serviceId && 
-            apt.userId === course.clientId &&
-            (apt.status === 'scheduled' || apt.status === 'upcoming')
-        );
+        // Check if course has any appointments that are linked to this treatment course via bookingGroupId
+        // and have status that is NOT 'pending' (meaning admin has approved them)
+        const courseId = course.id;
+        const courseAppointments = appointments.filter(apt => {
+            // Check if appointment is linked to this treatment course via bookingGroupId
+            if (!apt.bookingGroupId) return false;
+            
+            // bookingGroupId format: "group-{courseId}" or "group-tc-{courseId}"
+            // courseId format: "tc-xxx" or just "xxx"
+            // We need to check if bookingGroupId matches the courseId
+            
+            // Normalize bookingGroupId: remove "group-" prefix
+            let normalizedGroupId = apt.bookingGroupId;
+            if (normalizedGroupId.startsWith('group-')) {
+                normalizedGroupId = normalizedGroupId.replace('group-', '');
+            }
+            
+            // Check if normalizedGroupId matches courseId (with or without tc- prefix)
+            // Examples:
+            // - bookingGroupId: "group-tc-123" -> normalized: "tc-123" -> matches courseId: "tc-123" ✓
+            // - bookingGroupId: "group-123" -> normalized: "123" -> matches courseId: "tc-123" if we remove tc- ✓
+            // - bookingGroupId: "group-tc-123" -> normalized: "tc-123" -> matches courseId: "123" if we add tc- ✓
+            const matchesCourseId = normalizedGroupId === courseId || 
+                                   normalizedGroupId === courseId.replace(/^tc-/, '') ||
+                                   normalizedGroupId === `tc-${courseId.replace(/^tc-/, '')}` ||
+                                   apt.bookingGroupId === `group-${courseId}` ||
+                                   apt.bookingGroupId === `group-tc-${courseId.replace(/^tc-/, '')}`;
+            
+            if (!matchesCourseId) return false;
+            
+            // Only count appointments that are NOT 'pending' (admin has approved them)
+            // Approved statuses: 'upcoming', 'scheduled', 'in-progress', 'completed'
+            // Exclude: 'pending', 'cancelled'
+            const isApproved = apt.status !== 'pending' && apt.status !== 'cancelled';
+            
+            return isApproved;
+        });
+        
         return courseAppointments.length > 0;
     };
 

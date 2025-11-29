@@ -33,12 +33,21 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
     // Filter & Sort States
     const [upcomingSort, setUpcomingSort] = useState('date-asc');
     const [upcomingFilterService, setUpcomingFilterService] = useState('all');
-    const [upcomingFilterTime, setUpcomingFilterTime] = useState('all');
-    const [dateRangeStart, setDateRangeStart] = useState<string>(''); // YYYY-MM-DD format for filtering
-    const [dateRangeEnd, setDateRangeEnd] = useState<string>(''); // YYYY-MM-DD format for filtering
-    const [dateRangeStartDisplay, setDateRangeStartDisplay] = useState<string>(''); // DD/MM/YYYY format for display
-    const [dateRangeEndDisplay, setDateRangeEndDisplay] = useState<string>(''); // DD/MM/YYYY format for display
+    const [upcomingFilterTime, setUpcomingFilterTime] = useState<'all' | 'today' | 'this-week' | 'this-month'>('all');
     const [currentMonth, setCurrentMonth] = useState(new Date());
+    
+    // Calculate start of current week (Monday)
+    const getStartOfWeek = (date: Date): Date => {
+        const startOfWeek = new Date(date);
+        const dayOfWeek = startOfWeek.getDay(); // 0 = Sunday, 1 = Monday, ...
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to Monday = 0
+        startOfWeek.setDate(date.getDate() - daysToMonday);
+        startOfWeek.setHours(0, 0, 0, 0);
+        return startOfWeek;
+    };
+    
+    const [currentWeek, setCurrentWeek] = useState<Date>(getStartOfWeek(new Date()));
+    const [currentDay, setCurrentDay] = useState<Date>(new Date());
     
     const [historySort, setHistorySort] = useState('date-desc');
     const [historyFilterService, setHistoryFilterService] = useState('all');
@@ -109,24 +118,6 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
         }
     }, [currentUser.id]);
 
-    // Sync display values when dateRangeStart or dateRangeEnd changes
-    useEffect(() => {
-        if (dateRangeStart) {
-            const formatted = formatDateDDMMYYYY(new Date(dateRangeStart)).replace(/-/g, '/');
-            setDateRangeStartDisplay(formatted);
-        } else {
-            setDateRangeStartDisplay('');
-        }
-    }, [dateRangeStart]);
-
-    useEffect(() => {
-        if (dateRangeEnd) {
-            const formatted = formatDateDDMMYYYY(new Date(dateRangeEnd)).replace(/-/g, '/');
-            setDateRangeEndDisplay(formatted);
-        } else {
-            setDateRangeEndDisplay('');
-        }
-    }, [dateRangeEnd]);
 
     // Update local treatment courses when prop changes
     useEffect(() => {
@@ -480,26 +471,13 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
             filtered = filtered.filter(app => app.serviceId === upcomingFilterService);
         }
         
-        // Filter by date range if provided
-        if (dateRangeStart && dateRangeEnd) {
-            const startDate = new Date(dateRangeStart);
-            startDate.setHours(0, 0, 0, 0);
-            const endDate = new Date(dateRangeEnd);
-            endDate.setHours(23, 59, 59, 999);
-            
-            filtered = filtered.filter(app => {
-                const appDate = new Date(app.dateTime);
-                return appDate >= startDate && appDate <= endDate;
-            });
-        } else {
-            // If no date range, use time filter
-            filtered = filterByTime(filtered, upcomingFilterTime);
-        }
+        // Filter by time period
+        filtered = filterByTime(filtered, upcomingFilterTime);
 
         filtered.sort((a, b) => upcomingSort === 'date-asc' ? a.dateTime.getTime() - b.dateTime.getTime() : b.dateTime.getTime() - a.dateTime.getTime());
         
         return filtered;
-    }, [myUpcomingAppointments, upcomingSort, upcomingFilterService, upcomingFilterTime, dateRangeStart, dateRangeEnd]);
+    }, [myUpcomingAppointments, upcomingSort, upcomingFilterService, upcomingFilterTime]);
     
     const displayHistory = useMemo(() => {
         let filtered = [...myHistoryAppointments];
@@ -985,75 +963,30 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
                 <div className="max-w-5xl mx-auto">
                     {activeTab === 'upcoming' && (
                         <div className="space-y-6">
-                            <div className="bg-white p-4 rounded-lg shadow-md grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                            <div className="bg-white p-4 rounded-lg shadow-md grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                                 <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-medium text-gray-700">Xem lịch từ (dd/mm/yyyy)</label>
-                                    <div className="relative">
-                                        <input
-                                            type="date"
-                                            value={dateRangeStart}
-                                            onChange={(e) => {
-                                                const yyyyMMdd = e.target.value;
-                                                setDateRangeStart(yyyyMMdd);
-                                                if (yyyyMMdd) {
-                                                    const formatted = formatDateDDMMYYYY(new Date(yyyyMMdd)).replace(/-/g, '/');
-                                                    setDateRangeStartDisplay(formatted);
-                                                } else {
-                                                    setDateRangeStartDisplay('');
-                                                }
-                                                setUpcomingFilterTime('all'); // Clear time filter when using date range
-                                            }}
-                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                                        />
-                                        <div className="w-full p-2 pr-10 border rounded-md bg-white pointer-events-none flex items-center min-h-[42px]">
-                                            <span className={dateRangeStartDisplay ? 'text-gray-800' : 'text-gray-400'}>
-                                                {dateRangeStartDisplay || 'dd/mm/yyyy'}
-                                            </span>
-                                            <svg
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                            </svg>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex flex-col gap-2">
-                                    <label className="text-sm font-medium text-gray-700">đến (dd/mm/yyyy)</label>
-                                    <div className="relative">
-                                        <input
-                                            type="date"
-                                            value={dateRangeEnd}
-                                            onChange={(e) => {
-                                                const yyyyMMdd = e.target.value;
-                                                setDateRangeEnd(yyyyMMdd);
-                                                if (yyyyMMdd) {
-                                                    const formatted = formatDateDDMMYYYY(new Date(yyyyMMdd)).replace(/-/g, '/');
-                                                    setDateRangeEndDisplay(formatted);
-                                                } else {
-                                                    setDateRangeEndDisplay('');
-                                                }
-                                                setUpcomingFilterTime('all'); // Clear time filter when using date range
-                                            }}
-                                            min={dateRangeStart || undefined}
-                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                                        />
-                                        <div className="w-full p-2 pr-10 border rounded-md bg-white pointer-events-none flex items-center min-h-[42px]">
-                                            <span className={dateRangeEndDisplay ? 'text-gray-800' : 'text-gray-400'}>
-                                                {dateRangeEndDisplay || 'dd/mm/yyyy'}
-                                            </span>
-                                            <svg
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                            </svg>
-                                        </div>
-                                    </div>
+                                    <label className="text-sm font-medium text-gray-700">Chọn khoảng thời gian</label>
+                                    <select 
+                                        value={upcomingFilterTime} 
+                                        onChange={e => {
+                                            const value = e.target.value as 'all' | 'today' | 'this-week' | 'this-month';
+                                            setUpcomingFilterTime(value);
+                                            // Auto-update calendar view based on filter
+                                            const now = new Date();
+                                            if (value === 'today') {
+                                                setCurrentWeek(getStartOfWeek(now));
+                                                setCurrentDay(now);
+                                            } else if (value === 'this-week') {
+                                                setCurrentWeek(getStartOfWeek(now));
+                                            }
+                                        }} 
+                                        className="w-full p-2 border rounded-md bg-white"
+                                    >
+                                        <option value="all">Xem tất cả</option>
+                                        <option value="today">Hôm nay</option>
+                                        <option value="this-week">Tuần này</option>
+                                        <option value="this-month">Tháng này</option>
+                                </select>
                                 </div>
                                 <select value={upcomingFilterService} onChange={e => setUpcomingFilterService(e.target.value)} className="w-full p-2 border rounded-md bg-white">
                                     <option value="all">Lọc theo dịch vụ</option>
@@ -1133,30 +1066,8 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
                                 </div>
                             ) : displayUpcoming.length > 0 ? (
                                 (() => {
-                                    // Render calendar view
-                                    const year = currentMonth.getFullYear();
-                                    const month = currentMonth.getMonth();
-                                    
-                                    // Get first day of month and how many days
-                                    const firstDay = new Date(year, month, 1);
-                                    const lastDay = new Date(year, month + 1, 0);
-                                    const daysInMonth = lastDay.getDate();
-                                    const startingDayOfWeek = firstDay.getDay();
-                                    
-                                    // Adjust for Monday as first day (0 = Monday, 6 = Sunday)
-                                    const adjustedStartingDay = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1;
-                                    
-                                    const days: (Date | null)[] = [];
-                                    
-                                    // Add empty cells for days before month starts
-                                    for (let i = 0; i < adjustedStartingDay; i++) {
-                                        days.push(null);
-                                    }
-                                    
-                                    // Add all days of the month
-                                    for (let day = 1; day <= daysInMonth; day++) {
-                                        days.push(new Date(year, month, day));
-                                    }
+                                    // Determine if we should show week view or month view
+                                    const showWeekView = upcomingFilterTime === 'today' || upcomingFilterTime === 'this-week';
                                     
                                     // Group appointments by date
                                     const appointmentsByDate = new Map<string, (Appointment & { dateTime: Date })[]>();
@@ -1185,6 +1096,153 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
                                     });
                                     
                                     const weekDays = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
+                                    
+                                    // Calculate week days (Monday to Sunday)
+                                    const getWeekDays = (startDate: Date): Date[] => {
+                                        const days: Date[] = [];
+                                        const start = new Date(startDate);
+                                        // Ensure we start from Monday
+                                        const dayOfWeek = start.getDay(); // 0 = Sunday, 1 = Monday, ...
+                                        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                                        start.setDate(start.getDate() - daysToMonday);
+                                        start.setHours(0, 0, 0, 0);
+                                        
+                                        for (let i = 0; i < 7; i++) {
+                                            const day = new Date(start);
+                                            day.setDate(start.getDate() + i);
+                                            days.push(day);
+                                        }
+                                        return days;
+                                    };
+                                    
+                                    // Determine which week to show
+                                    const now = new Date();
+                                    const weekStartDate = showWeekView 
+                                        ? (upcomingFilterTime === 'today' ? getStartOfWeek(now) : getStartOfWeek(currentWeek))
+                                        : getStartOfWeek(currentMonth);
+                                    const weekDaysArray = getWeekDays(weekStartDate);
+                                    
+                                    // If showing week view, render week calendar
+                                    if (showWeekView) {
+                                        return (
+                                            <div className="bg-white p-6 rounded-lg shadow-md">
+                                                {/* Week navigation */}
+                                                <div className="flex items-center justify-between mb-6">
+                                                    <button
+                                                        onClick={() => {
+                                                            const prevWeek = new Date(weekStartDate);
+                                                            prevWeek.setDate(prevWeek.getDate() - 7);
+                                                            if (upcomingFilterTime === 'today') {
+                                                                setCurrentDay(prevWeek);
+                                                            }
+                                                            setCurrentWeek(prevWeek);
+                                                        }}
+                                                        className="px-4 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                                                    >
+                                                        ‹ Tuần trước
+                                                    </button>
+                                                    <h2 className="text-xl font-bold text-gray-800">
+                                                        {weekDaysArray[0].toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric' })} - {weekDaysArray[6].toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric' })}
+                                                    </h2>
+                                                    <button
+                                                        onClick={() => {
+                                                            const nextWeek = new Date(weekStartDate);
+                                                            nextWeek.setDate(nextWeek.getDate() + 7);
+                                                            if (upcomingFilterTime === 'today') {
+                                                                setCurrentDay(nextWeek);
+                                                            }
+                                                            setCurrentWeek(nextWeek);
+                                                        }}
+                                                        className="px-4 py-2 text-sm font-semibold bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                                                    >
+                                                        Tuần sau ›
+                                                    </button>
+                                                </div>
+                                                
+                                                {/* Week calendar grid */}
+                                                <div className="grid grid-cols-7 gap-2">
+                                                    {/* Week day headers */}
+                                                    {weekDays.map((day, index) => (
+                                                        <div key={day} className="p-2 text-center font-semibold text-gray-700 bg-gray-50 rounded">
+                                                            <div>{day}</div>
+                                                            <div className="text-xs text-gray-500 mt-1">
+                                                                {weekDaysArray[index].getDate()}/{weekDaysArray[index].getMonth() + 1}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    
+                                                    {/* Week days */}
+                                                    {weekDaysArray.map((date) => {
+                                                        // Format date as YYYY-MM-DD
+                                                        const year = date.getFullYear();
+                                                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                                                        const day = String(date.getDate()).padStart(2, '0');
+                                                        const dateKey = `${year}-${month}-${day}`;
+                                                        const dayAppointments = appointmentsByDate.get(dateKey) || [];
+                                                        const isToday = date.toDateString() === new Date().toDateString();
+                                                        
+                                                        return (
+                                                            <div
+                                                                key={dateKey}
+                                                                className={`p-3 min-h-[200px] border rounded ${isToday ? 'border-brand-primary bg-brand-secondary' : 'border-gray-200 bg-white'} hover:bg-gray-50 transition-colors`}
+                                                            >
+                                                                <div className={`text-sm font-semibold mb-2 ${isToday ? 'text-brand-primary' : 'text-gray-800'}`}>
+                                                                    {date.getDate()}
+                                                </div>
+                                                                <div className="space-y-1">
+                                                                    {dayAppointments.map(app => {
+                                                                        const getStatusColor = () => {
+                                                                            if (app.status === 'pending') return 'bg-yellow-100 text-yellow-800';
+                                                                            if (app.status === 'upcoming') return 'bg-blue-100 text-blue-800';
+                                                                            if (app.status === 'in-progress') return 'bg-purple-100 text-purple-800';
+                                                                            return 'bg-gray-100 text-gray-800';
+                                                                        };
+                                                                        
+                                                                        return (
+                                                                            <div
+                                                                                key={app.id}
+                                                                                onClick={() => setViewingAppointment(app)}
+                                                                                className={`text-xs p-1.5 rounded cursor-pointer transition-shadow hover:shadow-md ${getStatusColor()}`}
+                                                                                title={`${app.time} - ${app.serviceName}`}
+                                                                            >
+                                                                                <div className="font-semibold truncate">{app.time}</div>
+                                                                                <div className="truncate font-medium">{app.serviceName}</div>
+                                            </div>
+                                                                        );
+                                                                    })}
+                                        </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    
+                                    // Otherwise, render month view
+                                    const year = currentMonth.getFullYear();
+                                    const month = currentMonth.getMonth();
+                                    
+                                    // Get first day of month and how many days
+                                    const firstDay = new Date(year, month, 1);
+                                    const lastDay = new Date(year, month + 1, 0);
+                                    const daysInMonth = lastDay.getDate();
+                                    const startingDayOfWeek = firstDay.getDay();
+                                    
+                                    // Adjust for Monday as first day (0 = Monday, 6 = Sunday)
+                                    const adjustedStartingDay = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1;
+                                    
+                                    const days: (Date | null)[] = [];
+                                    
+                                    // Add empty cells for days before month starts
+                                    for (let i = 0; i < adjustedStartingDay; i++) {
+                                        days.push(null);
+                                    }
+                                    
+                                    // Add all days of the month
+                                    for (let day = 1; day <= daysInMonth; day++) {
+                                        days.push(new Date(year, month, day));
+                                    }
                                     
                                     return (
                                         <div className="bg-white p-6 rounded-lg shadow-md">
@@ -1245,7 +1303,7 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
                                                         >
                                                             <div className={`text-sm font-semibold mb-1 ${isToday ? 'text-brand-primary' : 'text-gray-800'}`}>
                                                                 {date.getDate()}
-                                                            </div>
+                                        </div>
                                                             <div className="space-y-1">
                                                                 {dayAppointments.map(app => {
                                                                     const getStatusColor = () => {
@@ -1264,7 +1322,7 @@ export const AppointmentsPage: React.FC<AppointmentsPageProps> = ({
                                                                         >
                                                                             <div className="font-semibold truncate">{app.time}</div>
                                                                             <div className="truncate font-medium">{app.serviceName}</div>
-                                                                        </div>
+                                    </div>
                                                                     );
                                                                 })}
                                                             </div>

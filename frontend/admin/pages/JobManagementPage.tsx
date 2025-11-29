@@ -1381,7 +1381,7 @@ const JobManagementPage: React.FC<JobManagementPageProps> = ({ allUsers, allServ
 
                                         return (
                                             <td 
-                                                key={dateString}
+                                                key={dateString} 
                                                 ref={(el) => {
                                                     if (el) {
                                                         cellRefs.current.set(cellKey, el);

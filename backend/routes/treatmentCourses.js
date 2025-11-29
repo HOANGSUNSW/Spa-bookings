@@ -5,6 +5,38 @@ const db = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 const { Op } = require('sequelize');
 
+// Helper function to create notification for admins
+const notifyAdmins = async (type, title, message, relatedId = null) => {
+    try {
+        // Get all admin users
+        const admins = await db.User.findAll({
+            where: { role: 'Admin', status: 'Active' }
+        });
+
+        // Create notification for each admin
+        const notifications = admins.map(admin => ({
+            id: `notif-${uuidv4()}`,
+            userId: admin.id,
+            type,
+            title,
+            message,
+            relatedId,
+            sentVia: 'app',
+            isRead: false,
+            emailSent: false,
+            createdAt: new Date(),
+        }));
+
+        if (notifications.length > 0) {
+            await db.Notification.bulkCreate(notifications);
+            console.log(`Created ${notifications.length} admin notifications for type: ${type}`);
+        }
+    } catch (error) {
+        console.error('Error creating admin notifications:', error);
+        // Don't throw error - notification failure shouldn't break main operation
+    }
+};
+
 // Helper: Calculate expiry date based on startDate and durationWeeks
 const calculateExpiryDate = (startDate, durationWeeks) => {
     const expiryDate = new Date(startDate);
@@ -582,6 +614,23 @@ router.put('/:id/confirm-payment', async (req, res) => {
             paymentStatus: payment.status,
             paymentAmount: payment.amount
         });
+
+        // Notify admins about completed payment (async, don't wait)
+        try {
+            const client = await db.User.findByPk(course.clientId);
+            const clientName = client ? client.name : 'Khách hàng';
+            const formatPrice = (price) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
+            
+            notifyAdmins(
+                'payment_received',
+                'Thanh toán tiền mặt',
+                `${clientName} đã thanh toán ${formatPrice(totalAmount)} bằng tiền mặt cho ${course.serviceName || 'liệu trình'}`,
+                payment.id
+            );
+        } catch (notifError) {
+            console.error('Error creating payment notification:', notifError);
+            // Don't fail payment if notification fails
+        }
         
         res.json({ course, payment, message: 'Payment confirmed successfully' });
     } catch (error) {
