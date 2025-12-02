@@ -13,7 +13,7 @@ import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { ChangePasswordScreen } from '../screens/profile/ChangePasswordScreen';
 import { TreatmentCoursesScreen } from '../screens/treatments/TreatmentCoursesScreen';
 import { TreatmentCourseDetailScreen } from '../screens/treatments/TreatmentCourseDetailScreen';
-import { ChatbotScreen } from '../screens/chatbot/ChatbotScreen';
+import { ChatbotScreen } from '../screens/client/ChatbotScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -47,11 +47,6 @@ const HomeStack = () => {
         component={BookingScreen}
         options={{ title: 'Đặt lịch' }}
       />
-      <Stack.Screen
-        name="Chatbot"
-        component={ChatbotScreen}
-        options={{ title: 'Trợ lý Anh Thơ Spa' }}
-      />
     </Stack.Navigator>
   );
 };
@@ -84,11 +79,6 @@ const ServicesStack = () => {
         name="Booking"
         component={BookingScreen}
         options={{ title: 'Đặt lịch' }}
-      />
-      <Stack.Screen
-        name="Chatbot"
-        component={ChatbotScreen}
-        options={{ title: 'Trợ lý Anh Thơ Spa' }}
       />
     </Stack.Navigator>
   );
@@ -201,6 +191,23 @@ const ProfileStack = () => {
   );
 };
 
+// Chatbot Stack
+const ChatbotStack = () => {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false
+      }}
+    >
+      <Stack.Screen
+        name="ChatbotMain"
+        component={ChatbotScreen}
+        options={{ title: 'Trợ lý ảo' }}
+      />
+    </Stack.Navigator>
+  );
+};
+
 export const MainNavigator = () => {
   return (
     <Tab.Navigator
@@ -273,22 +280,22 @@ export const MainNavigator = () => {
         }}
       />
       <Tab.Screen
+        name="ChatbotTab"
+        component={ChatbotStack}
+        options={{
+          title: 'Trợ lý',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles" color={color} size={size} />
+          )
+        }}
+      />
+      <Tab.Screen
         name="ProfileTab"
         component={ProfileStack}
         options={{
           title: 'Hồ sơ',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person" color={color} size={size} />
-          )
-        }}
-      />
-      <Tab.Screen
-        name="ChatbotTab"
-        component={ChatbotScreen}
-        options={{
-          title: 'Trợ lý',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubbles" color={color} size={size} />
           )
         }}
       />

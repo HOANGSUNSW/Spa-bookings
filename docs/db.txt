@@ -90,6 +90,8 @@ CREATE TABLE `services` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 4.4. Create the 'wallets' table (Gộp points_history logic vào đây)
+-- Note: Model sử dụng userId làm primary key, nhưng migration có id riêng
+-- Giữ nguyên cấu trúc migration để khớp với database thực tế
 CREATE TABLE `wallets` (
   `id` varchar(255) NOT NULL,
   `userId` varchar(255) NOT NULL,

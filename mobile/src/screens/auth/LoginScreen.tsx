@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   ScrollView
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { login, initializeApi } from '../../services/apiService';
 import type { LoginCredentials } from '../../types';
@@ -53,8 +52,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
         <Text style={styles.title}>SPA BOOKING</Text>
         <Text style={styles.subtitle}>Đăng nhập tài khoản</Text>
@@ -106,15 +104,10 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
       </View>
     </ScrollView>
-    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f8f9fa'
-  },
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa'

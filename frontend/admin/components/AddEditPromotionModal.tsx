@@ -27,8 +27,8 @@ const AddEditPromotionModal: React.FC<AddEditPromotionModalProps> = ({ promotion
     });
 
     const serviceCategories = useMemo(() => {
-        const categories = new Set(allServices.map(s => s.category));
-        return Array.from(categories);
+        const categoryIds = new Set(allServices.map(s => s.categoryId).filter(id => id !== undefined));
+        return Array.from(categoryIds);
     }, [allServices]);
 
     useEffect(() => {
@@ -36,8 +36,6 @@ const AddEditPromotionModal: React.FC<AddEditPromotionModalProps> = ({ promotion
             // Normalize isPublic: convert 0/1/null/true/false to boolean
             let normalizedIsPublic: boolean;
             if (promotion.isPublic === true || 
-                promotion.isPublic === 1 || 
-                promotion.isPublic === '1' || 
                 String(promotion.isPublic).toLowerCase() === 'true') {
                 normalizedIsPublic = true;
             } else {
@@ -304,7 +302,7 @@ const AddEditPromotionModal: React.FC<AddEditPromotionModalProps> = ({ promotion
                                                 disabled={selectAllServices}
                                                 className="rounded text-brand-primary focus:ring-brand-primary disabled:opacity-50 disabled:cursor-not-allowed"
                                             />
-                                            {service.name} ({service.category})
+                                            {service.name} ({service.categoryId})
                                         </label>
                                     ))}
                                 </div>

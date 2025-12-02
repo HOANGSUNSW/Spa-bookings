@@ -45,8 +45,9 @@ export const PromotionsScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const renderPromotion = ({ item }: { item: Promotion }) => {
+    const expiry = item.expiryDate || (item as any).endDate; // fallback if backend returns endDate
     const isExpiringSoon =
-      new Date(item.endDate).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000;
+      new Date(expiry).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000;
 
     return (
       <View style={styles.promoCard}>
@@ -80,19 +81,20 @@ export const PromotionsScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           </View>
 
-          {item.minPurchase && item.minPurchase > 0 && (
+          {((item as any).minOrderValue || item.minOrderValue) && (item as any).minOrderValue > 0 && (
             <View style={styles.detailRow}>
               <Ionicons name="cart-outline" size={16} color="#666" />
               <Text style={styles.detailLabel}>Đơn tối thiểu:</Text>
-              <Text style={styles.detailValue}>{formatCurrency(item.minPurchase)}</Text>
+              <Text style={styles.detailValue}>{formatCurrency((item as any).minOrderValue || item.minOrderValue)}</Text>
             </View>
           )}
 
-          {item.maxDiscount && item.maxDiscount > 0 && (
+          {/* Some backends may provide a `maxDiscount` field; show if present */}
+          {(item as any).maxDiscount && (item as any).maxDiscount > 0 && (
             <View style={styles.detailRow}>
               <Ionicons name="trending-down-outline" size={16} color="#666" />
               <Text style={styles.detailLabel}>Giảm tối đa:</Text>
-              <Text style={styles.detailValue}>{formatCurrency(item.maxDiscount)}</Text>
+              <Text style={styles.detailValue}>{formatCurrency((item as any).maxDiscount)}</Text>
             </View>
           )}
 
@@ -100,7 +102,7 @@ export const PromotionsScreen: React.FC<Props> = ({ navigation }) => {
             <Ionicons name="calendar-outline" size={16} color="#666" />
             <Text style={styles.detailLabel}>Hết hạn:</Text>
             <Text style={styles.detailValue}>
-              {new Date(item.endDate).toLocaleDateString('vi-VN')}
+              {new Date(expiry).toLocaleDateString('vi-VN')}
             </Text>
           </View>
         </View>

@@ -15,6 +15,7 @@ export interface ServiceCategory {
 }
 
 export interface Service {
+  isHot: any;
   id: string;
   name: string;
   description: string;
@@ -43,6 +44,7 @@ export interface Appointment {
   staffNotesAfterSession?: string;
   rejectionReason?: string;
   bookingGroupId?: string;
+  promotionId?: string; // ID of applied promotion (nullable)
   Client?: { // Client association from backend
     id: string;
     name: string;

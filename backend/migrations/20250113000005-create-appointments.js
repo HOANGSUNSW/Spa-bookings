@@ -76,13 +76,7 @@ module.exports = {
       promotionId: {
         type: Sequelize.STRING,
         allowNull: true,
-        references: {
-          model: 'promotions',
-          key: 'id',
-        },
-        onDelete: 'SET NULL',
-        onUpdate: 'CASCADE',
-        comment: 'ID mã khuyến mãi/voucher được áp dụng',
+        comment: 'ID mã khuyến mãi/voucher được áp dụng (lưu trữ ID nhưng không tạo FK để tránh ordering issues)',
       },
     });
 

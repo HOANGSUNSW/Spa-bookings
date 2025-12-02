@@ -34,16 +34,20 @@ export interface Service {
 }
 
 export interface Promotion {
-  id: number;
-  code: string;
+  id: string;
+  title: string;
   description: string;
+  code: string;
+  expiryDate: string;
+  imageUrl?: string;
   discountType: 'percentage' | 'fixed';
   discountValue: number;
-  startDate: string;
-  endDate: string;
-  isActive: boolean;
-  minPurchase?: number;
-  maxDiscount?: number;
+  termsAndConditions?: string;
+  targetAudience?: string;
+  applicableServiceIds?: string[];
+  minOrderValue?: number;
+  stock?: number | null;
+  isActive?: boolean;
 }
 
 export interface Review {
@@ -147,9 +151,4 @@ export interface RegisterData {
   phone?: string;
   birthday?: string;
   gender?: string;
-}
-
-export interface ChatMessage {
-  sender: 'user' | 'bot';
-  text: string;
 }
